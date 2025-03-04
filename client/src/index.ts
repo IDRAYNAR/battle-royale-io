@@ -3,6 +3,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { GameOverScene } from './scenes/GameOverScene';
+import * as Colyseus from 'colyseus.js';
 
 // Configuration du jeu Phaser
 const config: Phaser.Types.Core.GameConfig = {
@@ -33,6 +34,9 @@ const game = new Phaser.Game(config);
 window.addEventListener('resize', () => {
   game.scale.resize(window.innerWidth, window.innerHeight);
 });
+
+// Remplacez l'URL locale par l'URL Render
+const client = new Colyseus.Client("https://battle-royale-io-backend.onrender.com");
 
 // Exportation de l'instance du jeu pour y accéder depuis d'autres modules
 export default game; 

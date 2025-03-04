@@ -72,36 +72,54 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     this.onMessage("move", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.isAlive) {
-        // Mise à jour directe des coordonnées
-        player.x = data.x;
-        player.y = data.y;
-        player.rotation = data.rotation;
+        // Vérifier que les coordonnées sont des nombres valides
+        if (data.x !== undefined && !isNaN(data.x) && 
+            data.y !== undefined && !isNaN(data.y)) {
+          // Mise à jour directe des coordonnées
+          player.x = data.x;
+          player.y = data.y;
+          
+          // Vérifier que la rotation est un nombre valide
+          if (data.rotation !== undefined && !isNaN(data.rotation)) {
+            player.rotation = data.rotation;
+          }
+        } else {
+          console.warn(`Coordonnées invalides reçues du client ${client.sessionId}: x=${data.x}, y=${data.y}`);
+        }
       }
     });
 
     this.onMessage("rotate", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.isAlive) {
-        // Mise à jour de la rotation
-        player.rotation = data.rotation;
+        // Vérifier que la rotation est un nombre valide
+        if (data.rotation !== undefined && !isNaN(data.rotation)) {
+          // Mise à jour de la rotation
+          player.rotation = data.rotation;
+        } else {
+          console.warn(`Rotation invalide reçue du client ${client.sessionId}: ${data.rotation}`);
+        }
       }
     });
 
     this.onMessage("shoot", (client, data) => {
       const player = this.state.players.get(client.sessionId);
-      if (!player || !player.isAlive) return;
       
-      // Vérifier si le joueur est en train de recharger
-      const currentTime = Date.now();
-      if (player.isReloading && currentTime < player.reloadEndTime) {
-        return; // Le joueur est en train de recharger, ne peut pas tirer
+      if (!player || !player.isAlive || player.isReloading) {
+        return;
       }
       
-      // Vérifier le délai entre les tirs
-      let shotDelay = 1000; // Délai par défaut
-      if (player.weapon === "pistol") {
-        shotDelay = 1000;
-      } else if (player.weapon === "rifle") {
+      // Valider la rotation
+      if (data.rotation === undefined || isNaN(data.rotation)) {
+        console.warn(`Invalid rotation received from client ${client.sessionId}: ${data.rotation}`);
+        data.rotation = 0; // Utiliser une valeur par défaut
+      }
+      
+      // Vérifier le délai entre les tirs en fonction de l'arme
+      const currentTime = Date.now();
+      let shotDelay = 500; // Délai par défaut
+      
+      if (player.weapon === "rifle") {
         shotDelay = 3000;
       } else if (player.weapon === "shotgun") {
         shotDelay = 2000;
@@ -135,8 +153,10 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         bulletsPerShot = 5;
         damage = 20;
         speed = 700;
+        // Valider la rotation avant d'appeler fireRifleBurst
+        const rotation = typeof data.rotation === 'number' && !isNaN(data.rotation) ? data.rotation : 0;
         // Pour la mitraillette, on tire 5 balles à la suite avec un léger délai
-        this.fireRifleBurst(player, data.rotation, damage, speed, client.sessionId);
+        this.fireRifleBurst(player, rotation, damage, speed, client.sessionId);
         return;
       } else if (player.weapon === "shotgun") {
         bulletsPerShot = 3;
@@ -154,14 +174,20 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       
       // Tirer les balles
       if (player.weapon === "shotgun") {
+        // Valider la rotation avant d'appeler fireShotgunSpread
+        const rotation = typeof data.rotation === 'number' && !isNaN(data.rotation) ? data.rotation : 0;
         // Pour le shotgun, on tire 3 balles en éventail
-        this.fireShotgunSpread(player, data.rotation, damage, speed, spreadAngle, client.sessionId);
+        this.fireShotgunSpread(player, rotation, damage, speed, spreadAngle, client.sessionId);
       } else {
         // Pour le pistolet, on tire une seule balle
         const bullet = new Bullet();
         bullet.x = player.x;
         bullet.y = player.y;
-        bullet.rotation = data.rotation;
+        
+        // Valider la rotation une dernière fois avant de l'assigner à la balle
+        const rotation = typeof data.rotation === 'number' && !isNaN(data.rotation) ? data.rotation : 0;
+        bullet.rotation = rotation;
+        
         bullet.ownerId = client.sessionId;
         bullet.damage = damage;
         bullet.speed = speed;
@@ -196,7 +222,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           } else if (weapon.type === "rifle") {
             player.ammo = 20;
           } else if (weapon.type === "shotgun") {
-            player.ammo = 12;
+            player.ammo = 6;
           }
           
           // Réinitialiser l'état de rechargement
@@ -515,7 +541,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     } else if (weapon.type === "shotgun") {
       weapon.damage = 30;
       weapon.fireRate = 0.5;
-      weapon.ammoCapacity = 12;
+      weapon.ammoCapacity = 6;
       weapon.reloadTime = 5000; // 5 secondes
       weapon.shotDelay = 2000; // 2 secondes
       weapon.bulletsPerShot = 3; // 3 balles en éventail
@@ -616,7 +642,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         } else if (player.weapon === "rifle") {
           player.ammo = 20;
         } else if (player.weapon === "shotgun") {
-          player.ammo = 12;
+          player.ammo = 6;
         }
         
         player.isReloading = false;
@@ -630,6 +656,12 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
 
   // Méthode pour tirer une rafale de balles avec la mitraillette
   private fireRifleBurst(player: Player, rotation: number, damage: number, speed: number, playerId: string) {
+    // Vérifier que la rotation est un nombre valide
+    if (rotation === undefined || isNaN(rotation)) {
+      console.warn(`Rotation invalide dans fireRifleBurst pour le joueur ${playerId}: ${rotation}`);
+      rotation = 0; // Utiliser une valeur par défaut
+    }
+    
     // Consommer les munitions
     const bulletsToFire = Math.min(5, player.ammo);
     player.ammo -= bulletsToFire;
@@ -666,6 +698,12 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
 
   // Méthode pour tirer des balles en éventail avec le shotgun
   private fireShotgunSpread(player: Player, rotation: number, damage: number, speed: number, spreadAngle: number, playerId: string) {
+    // Vérifier que la rotation est un nombre valide
+    if (rotation === undefined || isNaN(rotation)) {
+      console.warn(`Rotation invalide dans fireShotgunSpread pour le joueur ${playerId}: ${rotation}`);
+      rotation = 0; // Utiliser une valeur par défaut
+    }
+    
     // Tirer 3 balles en éventail
     for (let i = -1; i <= 1; i++) {
       const bullet = new Bullet();

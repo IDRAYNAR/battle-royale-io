@@ -58,6 +58,18 @@ export class GameScene extends Phaser.Scene {
   private keyD!: Phaser.Input.Keyboard.Key;
   private keyR!: Phaser.Input.Keyboard.Key;
   
+  // Support manette
+  private gamepad: Phaser.Input.Gamepad.Gamepad | null = null;
+  private gamepadConnected: boolean = false;
+  private leftStickDeadZone: number = 0.2;
+  private rightStickDeadZone: number = 0.1;
+  private rightStickSensitivity: number = 1.5; // Sensibilité du joystick droit
+  private rightStickVirtualDistance: number = 300; // Distance virtuelle pour la rotation
+  private previousButtonStates: boolean[] = [];
+  private invertRightStickY: boolean = false;
+  private gamepadFireCooldown: number = 0;
+  private gamepadFireRate: number = 200; // Délai en ms entre chaque tir
+  
   // Interface utilisateur
   private healthBar!: Phaser.GameObjects.Graphics;
   private healthText!: Phaser.GameObjects.Text;
@@ -225,26 +237,93 @@ export class GameScene extends Phaser.Scene {
           pointer.worldY
         );
         
-        // Rotation du joueur vers la cible
-        this.currentPlayer.setRotation(angle);
-        
-        // Envoi de la rotation au serveur
-        this.room.send('rotate', { rotation: angle });
-        
-        // Gérer le tir avec notre nouvelle méthode
-        this.handleShooting();
+        // Vérifier que l'angle est un nombre valide avant de l'appliquer et de l'envoyer
+        if (!isNaN(angle) && angle !== undefined) {
+          this.currentPlayer.setRotation(angle);
+          
+          // Envoi de la rotation au serveur
+          this.room.send('rotate', { rotation: angle });
+          
+          // Gérer le tir avec notre nouvelle méthode
+          this.handleShooting();
+        } else {
+          console.warn(`Angle invalide calculé avec la souris: ${angle}, position souris: x=${pointer.worldX}, y=${pointer.worldY}`);
+        }
       }
     });
+    
+    // Initialisation des contrôles de manette
+    if (this.input.gamepad) {
+      this.input.gamepad.on('connected', (pad: Phaser.Input.Gamepad.Gamepad) => {
+        console.log('Manette connectée:', pad.id);
+        this.gamepad = pad;
+        this.gamepadConnected = true;
+        
+        // Détecter si c'est une manette Xbox
+        const isXboxController = pad.id.toLowerCase().includes('xbox');
+        console.log(`Type de manette détecté: ${isXboxController ? 'Xbox' : 'Autre'}`);
+        
+        // Initialiser l'état des boutons
+        this.previousButtonStates = pad.buttons.map(button => button.pressed);
+        
+        // Afficher un message à l'écran
+        const gamepadText = this.add.text(this.cameras.main.width/2, 100, `Manette ${isXboxController ? 'Xbox' : ''} connectée!`, {
+          fontFamily: 'Arial',
+          fontSize: '24px',
+          color: '#ffffff',
+          backgroundColor: '#000000',
+          padding: { x: 10, y: 5 }
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+        
+        // Faire disparaître le message après 3 secondes
+        this.tweens.add({
+          targets: gamepadText,
+          alpha: { from: 1, to: 0 },
+          duration: 3000,
+          ease: 'Power2',
+          onComplete: () => {
+            gamepadText.destroy();
+          }
+        });
+        
+        // Afficher les instructions pour les contrôles de la manette
+        this.showGamepadControls(isXboxController);
+      });
+      
+      this.input.gamepad.on('disconnected', (pad: Phaser.Input.Gamepad.Gamepad) => {
+        console.log('Manette déconnectée:', pad.id);
+        if (this.gamepad === pad) {
+          this.gamepad = null;
+          this.gamepadConnected = false;
+          this.previousButtonStates = [];
+        }
+      });
+      
+      // Vérifier si une manette est déjà connectée
+      if (this.input.gamepad.total > 0) {
+        this.gamepad = this.input.gamepad.getPad(0);
+        this.gamepadConnected = true;
+        console.log('Manette déjà connectée:', this.gamepad.id);
+        // Initialiser l'état des boutons
+        this.previousButtonStates = this.gamepad.buttons.map(button => button.pressed);
+      }
+    }
   }
 
   update() {
     if (!this.currentPlayer || !this.room || !this.input || !this.input.keyboard) return;
+    
+    // Réduire le cooldown du tir de la manette
+    if (this.gamepadFireCooldown > 0) {
+      this.gamepadFireCooldown -= this.game.loop.delta;
+    }
     
     // Gestion des déplacements
     let vx = 0;
     let vy = 0;
     const speed = 5;
     
+    // Contrôles clavier
     if ((this.keyW && this.keyW.isDown) || (this.cursors && this.cursors.up.isDown)) {
       vy = -speed;
     }
@@ -259,6 +338,172 @@ export class GameScene extends Phaser.Scene {
     
     if ((this.keyD && this.keyD.isDown) || (this.cursors && this.cursors.right.isDown)) {
       vx = speed;
+    }
+    
+    // Contrôles manette - Joystick gauche pour le mouvement
+    if (this.gamepadConnected && this.gamepad) {
+      // Joystick gauche pour le mouvement
+      if (Math.abs(this.gamepad.leftStick.x) > this.leftStickDeadZone) {
+        vx = this.gamepad.leftStick.x * speed;
+      }
+      
+      if (Math.abs(this.gamepad.leftStick.y) > this.leftStickDeadZone) {
+        vy = this.gamepad.leftStick.y * speed;
+      }
+      
+      // Si le joueur se déplace avec le joystick gauche, faire tourner le personnage dans cette direction
+      if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+        // Calculer l'angle de déplacement
+        const moveAngle = Math.atan2(vy, vx);
+        
+        // Appliquer la rotation au joueur
+        this.currentPlayer.rotation = moveAngle;
+        
+        // Envoi de la rotation au serveur
+        this.room.send('rotate', { rotation: moveAngle });
+        
+        // Debug - afficher les valeurs du joystick et l'angle dans la console
+        console.log(`Déplacement: vx=${vx.toFixed(2)}, vy=${vy.toFixed(2)}, angle=${moveAngle.toFixed(2)}`);
+      }
+      
+      // Joystick droit pour la rotation/visée (code existant mais désactivé pour les manettes)
+      // Nous gardons ce code en commentaire au cas où vous souhaiteriez le réactiver plus tard
+      /*
+      if (Math.abs(this.gamepad.rightStick.x) > this.rightStickDeadZone || 
+          Math.abs(this.gamepad.rightStick.y) > this.rightStickDeadZone) {
+        
+        // Vérifier que le joueur existe
+        if (!this.currentPlayer || !this.room) {
+          console.warn("Le joueur ou la room n'est pas défini pour la rotation avec le joystick");
+          return;
+        }
+        
+        try {
+          // Obtenir les valeurs du joystick droit
+          let rightStickX = this.gamepad.rightStick.x;
+          let rightStickY = this.gamepad.rightStick.y;
+          
+          // Détecter si c'est une manette Xbox
+          const isXboxController = this.gamepad.id.toLowerCase().includes('xbox');
+          
+          // Appliquer des ajustements spécifiques pour les manettes Xbox si nécessaire
+          if (isXboxController) {
+            // Inverser l'axe Y par défaut pour les manettes Xbox
+            rightStickY = -rightStickY;
+            
+            // Appliquer la sensibilité (amplifier les mouvements)
+            rightStickX *= this.rightStickSensitivity;
+            rightStickY *= this.rightStickSensitivity;
+            
+            // Limiter les valeurs entre -1 et 1
+            rightStickX = Phaser.Math.Clamp(rightStickX, -1, 1);
+            rightStickY = Phaser.Math.Clamp(rightStickY, -1, 1);
+          } else if (this.invertRightStickY) {
+            // Pour les autres manettes, utiliser le paramètre d'inversion
+            rightStickY = -rightStickY;
+          }
+          
+          // Calculer l'angle directement à partir des valeurs du joystick
+          // Utiliser Math.atan2 pour convertir les coordonnées x,y en angle
+          const angle = Math.atan2(rightStickY, rightStickX);
+          
+          // Appliquer la rotation au joueur de plusieurs façons pour s'assurer qu'elle est appliquée
+          this.currentPlayer.rotation = angle;
+          this.currentPlayer.setRotation(angle);
+          
+          // Forcer la mise à jour du sprite du joueur
+          this.currentPlayer.setActive(true);
+          this.currentPlayer.setVisible(true);
+          
+          // Envoi de la rotation au serveur (en radians)
+          this.room.send('rotate', { rotation: angle });
+          
+          // Debug - afficher les valeurs du joystick et l'angle dans la console
+          console.log(`Joystick droit: x=${rightStickX.toFixed(2)}, y=${rightStickY.toFixed(2)}, angle=${angle.toFixed(2)}, manette=${isXboxController ? 'Xbox' : 'Autre'}`);
+          
+          // Forcer la mise à jour de la caméra
+          this.cameras.main.setFollowOffset(0, 0);
+        } catch (error) {
+          console.error("Erreur lors de la rotation avec le joystick:", error);
+        }
+      }
+      */
+      
+      // Bouton pour tirer (généralement le bouton R2/RT ou A/X)
+      if ((this.gamepad.buttons[7].pressed || this.gamepad.buttons[0].pressed) && this.gamepadFireCooldown <= 0) { // R2/RT ou A/X
+        this.handleShooting();
+        this.gamepadFireCooldown = this.gamepadFireRate; // Réinitialiser le cooldown
+        
+        // Afficher un message de tir uniquement si c'est le premier appui (pas en maintien)
+        if (!this.previousButtonStates[7] && !this.previousButtonStates[0]) {
+          this.showTemporaryMessage('Tir!', 500);
+        }
+      }
+      
+      // Bouton pour recharger (généralement le bouton X/Square)
+      const reloadButtonIndex = 2; // X/Square
+      if (this.gamepad.buttons[reloadButtonIndex].pressed && 
+          !this.previousButtonStates[reloadButtonIndex]) {
+        this.reloadWeapon();
+        this.showTemporaryMessage('Rechargement...', 1500);
+      }
+      
+      // Bouton Select/Back (généralement le bouton 8) pour basculer l'inversion de l'axe Y
+      const toggleInvertButtonIndex = 8; // Select/Back
+      if (this.gamepad.buttons[toggleInvertButtonIndex] && 
+          this.gamepad.buttons[toggleInvertButtonIndex].pressed && 
+          !this.previousButtonStates[toggleInvertButtonIndex]) {
+        this.invertRightStickY = !this.invertRightStickY;
+        console.log(`Inversion axe Y: ${this.invertRightStickY ? 'Activée' : 'Désactivée'}`);
+        this.showTemporaryMessage(`Inversion axe Y: ${this.invertRightStickY ? 'Activée' : 'Désactivée'}`);
+      }
+      
+      // Boutons pour ajuster la sensibilité du joystick droit
+      // Utiliser les boutons LB/RB (4 et 5) pour diminuer/augmenter la sensibilité
+      const decreaseSensitivityButtonIndex = 4; // LB
+      const increaseSensitivityButtonIndex = 5; // RB
+      
+      if (this.gamepad.buttons[decreaseSensitivityButtonIndex] && 
+          this.gamepad.buttons[decreaseSensitivityButtonIndex].pressed && 
+          !this.previousButtonStates[decreaseSensitivityButtonIndex]) {
+        this.rightStickSensitivity = Math.max(0.5, this.rightStickSensitivity - 0.25);
+        this.showSensitivityMessage();
+        this.showTemporaryMessage(`Sensibilité: ${this.rightStickSensitivity.toFixed(2)}`);
+      }
+      
+      if (this.gamepad.buttons[increaseSensitivityButtonIndex] && 
+          this.gamepad.buttons[increaseSensitivityButtonIndex].pressed && 
+          !this.previousButtonStates[increaseSensitivityButtonIndex]) {
+        this.rightStickSensitivity = Math.min(3.0, this.rightStickSensitivity + 0.25);
+        this.showSensitivityMessage();
+        this.showTemporaryMessage(`Sensibilité: ${this.rightStickSensitivity.toFixed(2)}`);
+      }
+      
+      // Boutons pour ajuster la distance virtuelle du joystick droit
+      // Utiliser les boutons Y et A (3 et 0) pour diminuer/augmenter la distance
+      const decreaseDistanceButtonIndex = 3; // Y
+      const increaseDistanceButtonIndex = 0; // A
+      
+      if (this.gamepad.buttons[decreaseDistanceButtonIndex] && 
+          this.gamepad.buttons[decreaseDistanceButtonIndex].pressed && 
+          !this.previousButtonStates[decreaseDistanceButtonIndex]) {
+        this.rightStickVirtualDistance = Math.max(100, this.rightStickVirtualDistance - 50);
+        this.showVirtualDistanceMessage();
+        this.showTemporaryMessage(`Distance virtuelle: ${this.rightStickVirtualDistance}`);
+      }
+      
+      if (this.gamepad.buttons[increaseDistanceButtonIndex] && 
+          this.gamepad.buttons[increaseDistanceButtonIndex].pressed && 
+          !this.previousButtonStates[increaseDistanceButtonIndex]) {
+        this.rightStickVirtualDistance = Math.min(600, this.rightStickVirtualDistance + 50);
+        this.showVirtualDistanceMessage();
+        this.showTemporaryMessage(`Distance virtuelle: ${this.rightStickVirtualDistance}`);
+      }
+      
+      // Mettre à jour l'état précédent des boutons
+      for (let i = 0; i < this.gamepad.buttons.length; i++) {
+        this.previousButtonStates[i] = this.gamepad.buttons[i].pressed;
+      }
     }
     
     // Gestion de la touche R pour recharger
@@ -286,6 +531,12 @@ export class GameScene extends Phaser.Scene {
     const pointer = this.input.activePointer;
     
     if (pointer) {
+      // Vérifier que le joueur existe
+      if (!this.currentPlayer || !this.room) {
+        console.warn("Le joueur ou la room n'est pas défini pour la rotation avec la souris");
+        return;
+      }
+      
       const angle = Phaser.Math.Angle.Between(
         this.currentPlayer.x,
         this.currentPlayer.y,
@@ -293,10 +544,15 @@ export class GameScene extends Phaser.Scene {
         pointer.worldY
       );
       
-      this.currentPlayer.setRotation(angle);
-      
-      // Envoi des données de rotation au serveur
-      this.room.send('rotate', { rotation: angle });
+      // Vérifier que l'angle est un nombre valide avant de l'appliquer et de l'envoyer
+      if (!isNaN(angle) && angle !== undefined) {
+        this.currentPlayer.setRotation(angle);
+        
+        // Envoi des données de rotation au serveur
+        this.room.send('rotate', { rotation: angle });
+      } else {
+        console.warn(`Angle invalide calculé avec la souris: ${angle}, position souris: x=${pointer.worldX}, y=${pointer.worldY}`);
+      }
     }
     
     // Vérification des armes à proximité
@@ -831,7 +1087,6 @@ export class GameScene extends Phaser.Scene {
     });
     this.reloadingText.setOrigin(0.5);
     this.reloadingText.setScrollFactor(0);
-    this.reloadingText.setDepth(100);
     this.reloadingText.setVisible(false);
     
     // Mise à jour de la barre de vie
@@ -1322,5 +1577,189 @@ export class GameScene extends Phaser.Scene {
         this.hideReloadingMessage();
       });
     }
+  }
+
+  // Méthode pour afficher un message de sensibilité
+  private showSensitivityMessage() {
+    // Supprimer l'ancien message s'il existe
+    const existingMessage = this.children.getByName('sensitivityMessage');
+    if (existingMessage) {
+      existingMessage.destroy();
+    }
+    
+    // Afficher un message avec la sensibilité actuelle
+    const sensitivityText = this.add.text(
+      this.cameras.main.width/2, 
+      150, 
+      `Sensibilité: ${this.rightStickSensitivity.toFixed(2)}`, 
+      {
+        fontFamily: 'Arial',
+        fontSize: '20px',
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        padding: { x: 10, y: 5 }
+      }
+    ).setOrigin(0.5).setScrollFactor(0).setDepth(1000).setName('sensitivityMessage');
+    
+    // Faire disparaître le message après 2 secondes
+    this.tweens.add({
+      targets: sensitivityText,
+      alpha: { from: 1, to: 0 },
+      duration: 2000,
+      ease: 'Power2',
+      onComplete: () => {
+        sensitivityText.destroy();
+      }
+    });
+    
+    console.log(`Sensibilité du joystick droit ajustée à: ${this.rightStickSensitivity.toFixed(2)}`);
+  }
+
+  // Méthode pour afficher un message de distance virtuelle
+  private showVirtualDistanceMessage() {
+    // Supprimer l'ancien message s'il existe
+    const existingMessage = this.children.getByName('virtualDistanceMessage');
+    if (existingMessage) {
+      existingMessage.destroy();
+    }
+    
+    // Afficher un message avec la distance virtuelle actuelle
+    const virtualDistanceText = this.add.text(
+      this.cameras.main.width/2, 
+      150, 
+      `Distance virtuelle: ${this.rightStickVirtualDistance}`, 
+      {
+        fontFamily: 'Arial',
+        fontSize: '20px',
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        padding: { x: 10, y: 5 }
+      }
+    ).setOrigin(0.5).setScrollFactor(0).setDepth(1000).setName('virtualDistanceMessage');
+    
+    // Faire disparaître le message après 2 secondes
+    this.tweens.add({
+      targets: virtualDistanceText,
+      alpha: { from: 1, to: 0 },
+      duration: 2000,
+      ease: 'Power2',
+      onComplete: () => {
+        virtualDistanceText.destroy();
+      }
+    });
+    
+    console.log(`Distance virtuelle du joystick droit ajustée à: ${this.rightStickVirtualDistance}`);
+  }
+
+  // Méthode pour afficher les instructions pour les contrôles de la manette
+  private showGamepadControls(isXboxController: boolean) {
+    // Supprimer l'ancien message s'il existe
+    const existingMessage = this.children.getByName('gamepadControls');
+    if (existingMessage) {
+      existingMessage.destroy();
+    }
+    
+    // Préparer les instructions en fonction du type de manette
+    const buttonNames = isXboxController ? 
+      { fire: 'RT/A', reload: 'X', invert: 'Back', sensitivity: 'LB/RB', distance: 'Y/A' } :
+      { fire: 'R2/X', reload: 'Square', invert: 'Select', sensitivity: 'L1/R1', distance: 'Triangle/X' };
+    
+    const instructions = [
+      `Joystick gauche: Se déplacer`,
+      `Joystick droit: Viser/Tourner`,
+      `${buttonNames.fire}: Tirer`,
+      `${buttonNames.reload}: Recharger`,
+      `${buttonNames.invert}: Inverser axe Y`,
+      `${buttonNames.sensitivity}: Ajuster sensibilité`,
+      `${buttonNames.distance}: Ajuster précision`
+    ];
+    
+    // Créer un conteneur pour les instructions
+    const controlsContainer = this.add.container(this.cameras.main.width/2, 200)
+      .setScrollFactor(0)
+      .setDepth(1000)
+      .setName('gamepadControls');
+    
+    // Ajouter un fond
+    const background = this.add.graphics();
+    background.fillStyle(0x000000, 0.7);
+    background.fillRect(-200, -20, 400, 30 + instructions.length * 25);
+    controlsContainer.add(background);
+    
+    // Ajouter le titre
+    const title = this.add.text(
+      0, 
+      0, 
+      `Instructions pour la manette ${isXboxController ? 'Xbox' : ''}`, 
+      {
+        fontFamily: 'Arial',
+        fontSize: '20px',
+        color: '#ffffff',
+        align: 'center'
+      }
+    ).setOrigin(0.5);
+    controlsContainer.add(title);
+    
+    // Ajouter les instructions
+    instructions.forEach((instruction, index) => {
+      const instructionText = this.add.text(
+        0,
+        30 + index * 25,
+        instruction,
+        {
+          fontFamily: 'Arial',
+          fontSize: '16px',
+          color: '#ffffff',
+          align: 'center'
+        }
+      ).setOrigin(0.5);
+      controlsContainer.add(instructionText);
+    });
+    
+    // Faire disparaître le message après 6 secondes
+    this.tweens.add({
+      targets: controlsContainer,
+      alpha: { from: 1, to: 0 },
+      duration: 6000,
+      ease: 'Power2',
+      delay: 2000, // Attendre 2 secondes avant de commencer à disparaître
+      onComplete: () => {
+        controlsContainer.destroy();
+      }
+    });
+  }
+
+  // Méthode pour afficher un message temporaire
+  private showTemporaryMessage(message: string, duration: number = 1000) {
+    // Supprimer l'ancien message s'il existe
+    const existingMessage = this.children.getByName('temporaryMessage');
+    if (existingMessage) {
+      existingMessage.destroy();
+    }
+    
+    // Afficher le message
+    const tempText = this.add.text(
+      this.cameras.main.width/2, 
+      this.cameras.main.height - 100, 
+      message, 
+      {
+        fontFamily: 'Arial',
+        fontSize: '18px',
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        padding: { x: 10, y: 5 }
+      }
+    ).setOrigin(0.5).setScrollFactor(0).setDepth(1000).setName('temporaryMessage');
+    
+    // Faire disparaître le message après la durée spécifiée
+    this.tweens.add({
+      targets: tempText,
+      alpha: { from: 1, to: 0 },
+      duration: duration,
+      ease: 'Power2',
+      onComplete: () => {
+        tempText.destroy();
+      }
+    });
   }
 } 

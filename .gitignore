@@ -1,5 +1,7 @@
 # Dépendances
 node_modules/
+.server/node_modules/
+.client/node_modules/
 npm-debug.log
 yarn-error.log
 yarn-debug.log
@@ -10,6 +12,11 @@ yarn.lock
 dist/
 build/
 lib/
+.cache/
+.parcel-cache/
+.webpack/
+.next/
+out/
 
 # Fichiers de développement
 .env
@@ -21,16 +28,47 @@ lib/
 # Fichiers système
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Fichiers d'éditeur
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Logs
 logs
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log* 
+yarn-error.log*
+lerna-debug.log*
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+
+# Fichiers temporaires
+.tmp/
+.temp/
+temp/
+tmp/
+
+# Fichiers de déploiement
+.vercel
+.netlify
+.firebase/
+.render/ 

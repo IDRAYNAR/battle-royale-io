@@ -92,8 +92,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   init() {
+    // Configuration de l'URL du serveur en fonction de l'environnement
+    const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? `ws://${window.location.hostname}:2567` // URL locale pour le développement
+      : "wss://battle-royale-io-backend.onrender.com"; // URL de production sur Render
+    
     // Initialisation du client Colyseus
-    this.client = new Colyseus.Client('https://battle-royale-io-backend.onrender.com');
+    this.client = new Colyseus.Client(serverUrl);
+    console.log(`GameScene: Connexion au serveur: ${serverUrl}`);
   }
 
   async create() {
@@ -667,8 +673,6 @@ export class GameScene extends Phaser.Scene {
     });
     
     this.room.onMessage("zoneTimer", (message: { nextShrinkTime: number }) => {
-      console.log(`Message zoneTimer reçu:`, message);
-      
       // Mise à jour du timer
       this.nextShrinkTime = message.nextShrinkTime || 30;
       this.updateZoneTimer();

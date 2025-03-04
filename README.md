@@ -54,6 +54,34 @@ cd client
 npm start
 ```
 
+## Déploiement
+
+### Déploiement du backend sur Render
+
+1. Créez un compte sur [Render](https://render.com/)
+2. Créez un nouveau Web Service et connectez votre dépôt GitHub
+3. Configurez le service avec les paramètres suivants :
+   - **Name**: battle-royale-io-backend
+   - **Environment**: Node
+   - **Build Command**: `cd server && npm install`
+   - **Start Command**: `cd server && npm start`
+   - **Root Directory**: / (racine du projet)
+4. Ajoutez les variables d'environnement :
+   - `PORT`: 10000 (ou le port de votre choix)
+   - `NODE_ENV`: production
+
+### Déploiement du frontend sur Vercel
+
+1. Créez un compte sur [Vercel](https://vercel.com/)
+2. Importez votre dépôt GitHub
+3. Configurez le projet avec les paramètres suivants :
+   - **Framework Preset**: Other
+   - **Root Directory**: client
+   - **Build Command**: `npm install && npm run build`
+   - **Output Directory**: dist
+
+Le code est configuré pour détecter automatiquement l'environnement et utiliser l'URL appropriée pour le serveur.
+
 ## Comment jouer
 
 1. Ouvrez le jeu dans votre navigateur

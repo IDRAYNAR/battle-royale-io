@@ -61,6 +61,9 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   private shrinkSpeed: number = 10; // Augmenté de 5 à 10
   // Flag pour indiquer si la zone est active
   private zoneActive: boolean = false;
+  
+  // Nombre minimum d'armes sur la carte
+  private minWeapons: number = 6;
 
   onCreate(options: any) {
     this.setState(new BattleRoyaleState());
@@ -202,13 +205,19 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           // Informer le client de la mise à jour des munitions
           this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
           
+          // Supprimer l'arme de la carte
           this.state.weapons.delete(data.weaponId);
+          
+          // Programmer l'apparition d'une nouvelle arme après 2 secondes
+          setTimeout(() => {
+            this.generateSingleWeapon();
+          }, 2000);
         }
       }
     });
 
     // Génération des armes sur la carte
-    this.generateWeapons(10);
+    this.generateWeapons(Math.max(10, this.minWeapons));
     
     // Initialisation de la zone
     this.state.safeZoneRadius = 1000;
@@ -293,17 +302,16 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
 
   // Boucle de jeu principale
   private gameLoop() {
-    // Mise à jour des balles
     this.updateBullets();
-    
-    // Vérification des collisions
     this.checkCollisions();
-    
-    // Vérification de la condition de victoire
     this.checkWinCondition();
     
-    // Vérification des joueurs hors de la zone sûre
-    this.checkSafeZone();
+    // Vérifier qu'il y a toujours le nombre minimum d'armes sur la carte
+    this.ensureMinimumWeapons();
+    
+    if (this.zoneActive) {
+      this.checkSafeZone();
+    }
   }
 
   // Mise à jour des balles
@@ -473,41 +481,56 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     const weaponTypes = ["pistol", "rifle", "shotgun"];
     
     for (let i = 0; i < count; i++) {
-      const weapon = new Weapon();
-      
-      // Position aléatoire sur la carte
-      weapon.x = Math.floor(Math.random() * this.state.mapWidth);
-      weapon.y = Math.floor(Math.random() * this.state.mapHeight);
-      
-      // Type d'arme aléatoire
-      weapon.type = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
-      
-      // Définition des propriétés de l'arme en fonction de son type
-      if (weapon.type === "pistol") {
-        weapon.damage = 10;
-        weapon.fireRate = 1;
-        weapon.ammoCapacity = 9;
-        weapon.reloadTime = 2000; // 2 secondes
-        weapon.shotDelay = 1000; // 1 seconde
-        weapon.bulletsPerShot = 1;
-      } else if (weapon.type === "rifle") {
-        weapon.damage = 20;
-        weapon.fireRate = 2;
-        weapon.ammoCapacity = 20;
-        weapon.reloadTime = 3000; // 3 secondes
-        weapon.shotDelay = 3000; // 3 secondes
-        weapon.bulletsPerShot = 5; // 5 balles à la suite
-      } else if (weapon.type === "shotgun") {
-        weapon.damage = 30;
-        weapon.fireRate = 0.5;
-        weapon.ammoCapacity = 12;
-        weapon.reloadTime = 5000; // 5 secondes
-        weapon.shotDelay = 2000; // 2 secondes
-        weapon.bulletsPerShot = 3; // 3 balles en éventail
-      }
-      
-      // Ajout de l'arme à l'état de la salle
-      this.state.weapons.set(this.generateId(), weapon);
+      this.generateSingleWeapon();
+    }
+  }
+  
+  // Génération d'une seule arme
+  private generateSingleWeapon() {
+    const weaponTypes = ["pistol", "rifle", "shotgun"];
+    const weapon = new Weapon();
+    
+    // Position aléatoire sur la carte
+    weapon.x = Math.floor(Math.random() * this.state.mapWidth);
+    weapon.y = Math.floor(Math.random() * this.state.mapHeight);
+    
+    // Type d'arme aléatoire
+    weapon.type = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+    
+    // Définition des propriétés de l'arme en fonction de son type
+    if (weapon.type === "pistol") {
+      weapon.damage = 10;
+      weapon.fireRate = 1;
+      weapon.ammoCapacity = 9;
+      weapon.reloadTime = 2000; // 2 secondes
+      weapon.shotDelay = 1000; // 1 seconde
+      weapon.bulletsPerShot = 1;
+    } else if (weapon.type === "rifle") {
+      weapon.damage = 20;
+      weapon.fireRate = 2;
+      weapon.ammoCapacity = 20;
+      weapon.reloadTime = 3000; // 3 secondes
+      weapon.shotDelay = 3000; // 3 secondes
+      weapon.bulletsPerShot = 5; // 5 balles à la suite
+    } else if (weapon.type === "shotgun") {
+      weapon.damage = 30;
+      weapon.fireRate = 0.5;
+      weapon.ammoCapacity = 12;
+      weapon.reloadTime = 5000; // 5 secondes
+      weapon.shotDelay = 2000; // 2 secondes
+      weapon.bulletsPerShot = 3; // 3 balles en éventail
+    }
+    
+    // Ajout de l'arme à l'état de la salle
+    this.state.weapons.set(this.generateId(), weapon);
+  }
+  
+  // Vérification du nombre d'armes sur la carte
+  private ensureMinimumWeapons() {
+    const currentWeaponCount = this.state.weapons.size;
+    if (currentWeaponCount < this.minWeapons) {
+      const weaponsToAdd = this.minWeapons - currentWeaponCount;
+      this.generateWeapons(weaponsToAdd);
     }
   }
 

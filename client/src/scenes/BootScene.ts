@@ -16,12 +16,12 @@ export class BootScene extends Phaser.Scene {
     this.load.image('background', 'assets/PNG/Tiles/tile_01.png'); // Utilisé comme tuile de fond
     
     // Personnages
-    this.load.image('player', 'assets/PNG/Man Blue/manBlue_gun.png');
-    this.load.image('player_gun', 'assets/PNG/Man Blue/manBlue_gun.png');
-    this.load.image('player_machine', 'assets/PNG/Man Blue/manBlue_machine.png');
-    this.load.image('player_silencer', 'assets/PNG/Man Blue/manBlue_silencer.png');
-    this.load.image('player_hold', 'assets/PNG/Man Blue/manBlue_hold.png');
-    this.load.image('enemy', 'assets/PNG/Man Brown/manBrown_gun.png');
+    this.load.image('player', 'assets/PNG/Characters/ManBlue/manBlue_gun.png');
+    this.load.image('player_gun', 'assets/PNG/Characters/ManBlue/manBlue_gun.png');
+    this.load.image('player_machine', 'assets/PNG/Characters/ManBlue/manBlue_machine.png');
+    this.load.image('player_silencer', 'assets/PNG/Characters/ManBlue/manBlue_silencer.png');
+    this.load.image('player_hold', 'assets/PNG/Characters/ManBlue/manBlue_hold.png');
+    this.load.image('enemy', 'assets/PNG/Characters/ManBrown/manBrown_gun.png');
     
     // Armes
     this.load.image('pistol', 'assets/PNG/weapon_gun.png');
@@ -32,7 +32,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image('bullet', 'assets/PNG/Tiles/tile_187.png'); // Utiliser une tuile comme balle temporaire
     
     // Interface utilisateur
-    this.load.image('button', 'assets/PNG/Green/Default/button_rectangle_depth_flat.png');
+    this.load.image('button', 'assets/PNG/UI/button_rectangle_depth_flat.png');
     
     // Récupération des dimensions de l'écran
     const width = this.cameras.main.width;

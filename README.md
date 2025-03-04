@@ -47,16 +47,12 @@ cd server
 npm start
 ```
 
-Le serveur sera accessible à l'adresse `http://localhost:2567`.
-
 ### Démarrer le client
 
 ```bash
 cd client
 npm start
 ```
-
-Le client sera accessible à l'adresse `http://localhost:8080`.
 
 ## Comment jouer
 

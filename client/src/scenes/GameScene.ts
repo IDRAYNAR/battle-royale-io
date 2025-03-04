@@ -93,7 +93,7 @@ export class GameScene extends Phaser.Scene {
 
   init() {
     // Initialisation du client Colyseus
-    this.client = new Colyseus.Client('ws://localhost:2567');
+    this.client = new Colyseus.Client('https://battle-royale-io-backend.onrender.com');
   }
 
   async create() {

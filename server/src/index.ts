@@ -27,7 +27,7 @@ gameServer.define("battle_royale", BattleRoyaleRoom);
 
 // Démarrage du serveur
 gameServer.listen(port).then(() => {
-  console.log(`🎮 Serveur de jeu démarré sur http://localhost:${port}`);
+  console.log(`🎮 Serveur de jeu démarré sur https://battle-royale-io-backend.onrender.com`);
 }).catch(err => {
   console.error(err);
 }); 

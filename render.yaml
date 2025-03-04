@@ -2,8 +2,9 @@ services:
   - type: web
     name: battle-royale-io-backend
     env: node
-    buildCommand: cd server && npm install && npm run build
-    startCommand: cd server && npm run render-start
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm run render-start
     envVars:
       - key: NODE_ENV
         value: production

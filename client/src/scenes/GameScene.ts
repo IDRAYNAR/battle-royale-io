@@ -106,6 +106,13 @@ export class GameScene extends Phaser.Scene {
   private uiLayer!: Phaser.GameObjects.Container;
   private notificationLayer!: Phaser.GameObjects.Container;
 
+  // Propriétés pour la prise en charge des manettes
+  private gamepad: Phaser.Input.Gamepad.Gamepad | null = null;
+  private gamepadsEnabled: boolean = false;
+  private lastRightTriggerValue: number = 0;
+  private joystickDeadZone: number = 0.2;
+  private gamepadInfoText: Phaser.GameObjects.Text | null = null;
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -346,6 +353,44 @@ export class GameScene extends Phaser.Scene {
       this.keyR = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     }
 
+    // Initialiser le support des manettes
+    if (this.input && this.input.gamepad) {
+      // Activer le système de manettes
+      this.input.gamepad.on('connected', (pad: Phaser.Input.Gamepad.Gamepad) => {
+        console.log('Manette connectée:', pad.id);
+        this.gamepad = pad;
+        this.gamepadsEnabled = true;
+        
+        // Afficher les informations sur les contrôles de la manette
+        this.showGamepadInfo(pad.id);
+      });
+      
+      this.input.gamepad.on('disconnected', (pad: Phaser.Input.Gamepad.Gamepad) => {
+        console.log('Manette déconnectée:', pad.id);
+        if (this.gamepad === pad) {
+          this.gamepad = null;
+        }
+        
+        // Vérifier si d'autres manettes sont connectées
+        if (this.input?.gamepad?.gamepads.length === 0) {
+          this.gamepadsEnabled = false;
+          
+          // Cacher les informations sur les contrôles de la manette
+          this.hideGamepadInfo();
+        }
+      });
+      
+      // Vérifier si une manette est déjà connectée
+      if (this.input.gamepad.gamepads.length > 0) {
+        this.gamepad = this.input.gamepad.gamepads[0];
+        this.gamepadsEnabled = true;
+        console.log('Manette déjà connectée:', this.gamepad.id);
+        
+        // Afficher les informations sur les contrôles de la manette
+        this.showGamepadInfo(this.gamepad.id);
+      }
+    }
+
     // Variable pour suivre si un tir est en cours
     this.isShooting = false;
 
@@ -387,6 +432,35 @@ export class GameScene extends Phaser.Scene {
 
     // Gérer les contrôles du joueur
     this.handlePlayerControls();
+
+    // Support de la gâchette droite (R2) pour tirer
+    if (this.gamepadsEnabled && this.gamepad) {
+      // Mettre à jour la rotation du joueur avec le joystick droit en temps réel
+      this.updatePlayerRotation();
+
+      // Vérifier la pression sur la gâchette droite (R2/RT)
+      const rightTriggerValue = this.gamepad.buttons[7].value; // R2 sur PlayStation, RT sur Xbox
+
+      // Vérifier si la gâchette est suffisamment pressée et n'était pas pressée avant
+      if (rightTriggerValue > 0.5 && this.lastRightTriggerValue <= 0.5) {
+        // Vérifier le délai entre les tirs
+        const currentTime = this.time.now;
+        const fireRate = this.currentWeapon ? this.getFireRateForWeapon(this.currentWeapon) : 0;
+        
+        if (!this.isShooting && (currentTime - this.lastFireTime >= fireRate)) {
+          this.isShooting = true;
+          this.handleShootingOnClick();
+          
+          // Réinitialiser le flag après un délai pour éviter les problèmes de spam
+          this.time.delayedCall(100, () => {
+            this.isShooting = false;
+          });
+        }
+      }
+
+      // Mettre à jour la valeur de la dernière pression
+      this.lastRightTriggerValue = rightTriggerValue;
+    }
 
     // Mettre à jour la position des joueurs sur la minimap
     this.drawPlayersOnMinimap();
@@ -1838,6 +1912,27 @@ export class GameScene extends Phaser.Scene {
       vx = speed;
     }
 
+    // Support des manettes - Joystick gauche (L3)
+    if (this.gamepadsEnabled && this.gamepad) {
+      // Obtenir les valeurs du joystick gauche
+      const leftStickX = this.gamepad.leftStick.x;
+      const leftStickY = this.gamepad.leftStick.y;
+
+      // Appliquer une zone morte pour éviter les mouvements indésirables
+      if (Math.abs(leftStickX) > this.joystickDeadZone) {
+        vx = leftStickX * speed;
+      }
+
+      if (Math.abs(leftStickY) > this.joystickDeadZone) {
+        vy = leftStickY * speed;
+      }
+
+      // Support de la touche R2/RT pour recharger (bouton B sur Xbox, cercle sur PlayStation)
+      if (this.gamepad.buttons[1].pressed) { // Bouton B (Xbox) ou Circle (PlayStation)
+        this.reloadWeapon();
+      }
+    }
+
     // Gestion de la touche R pour recharger
     if (this.keyR && Phaser.Input.Keyboard.JustDown(this.keyR)) {
       this.reloadWeapon();
@@ -1855,43 +1950,72 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Gestion de la rotation en fonction de la position de la souris
-    const pointer = this.input.activePointer;
-    if (pointer) {
-      const angle = Phaser.Math.Angle.Between(
-        this.currentPlayer.x,
-        this.currentPlayer.y,
-        pointer.worldX,
-        pointer.worldY
-      );
-      
-      // Rotation du joueur vers la cible
-      this.currentPlayer.setRotation(angle);
-      
-      // Envoi de la rotation au serveur
-      this.room.send('rotate', { rotation: angle });
-    }
-  }
-
-  // Méthode pour mettre à jour la rotation du joueur en fonction de la position de la souris
-  private updatePlayerRotation() {
-    // Mettre à jour la rotation du joueur en fonction de la position de la souris
-    if (this.currentPlayer && this.room) {
+    // Seulement si aucune manette n'est utilisée
+    if (!this.gamepadsEnabled || !this.gamepad) {
       const pointer = this.input.activePointer;
-      const angle = Phaser.Math.Angle.Between(
-        this.currentPlayer.x,
-        this.currentPlayer.y,
-        pointer.worldX,
-        pointer.worldY
-      );
-      
-      // S'assurer que l'angle est un nombre valide
-      if (!isNaN(angle) && isFinite(angle)) {
-        // Mettre à jour la rotation du joueur
+      if (pointer) {
+        const angle = Phaser.Math.Angle.Between(
+          this.currentPlayer.x,
+          this.currentPlayer.y,
+          pointer.worldX,
+          pointer.worldY
+        );
+        
+        // Rotation du joueur vers la cible
         this.currentPlayer.setRotation(angle);
         
         // Envoi de la rotation au serveur
         this.room.send('rotate', { rotation: angle });
       }
+    }
+  }
+
+  // Méthode pour mettre à jour la rotation du joueur en fonction de la position de la souris
+  private updatePlayerRotation() {
+    if (!this.currentPlayer || !this.room) return;
+
+    let angle: number | null = null;
+
+    // Support des manettes - Joystick droit (R3)
+    if (this.gamepadsEnabled && this.gamepad) {
+      const rightStickX = this.gamepad.rightStick.x;
+      const rightStickY = this.gamepad.rightStick.y;
+
+      // Vérifier si le joystick droit est utilisé (en dehors de la zone morte)
+      if (Math.abs(rightStickX) > this.joystickDeadZone || Math.abs(rightStickY) > this.joystickDeadZone) {
+        // Calculer l'angle en fonction de la position du joystick droit
+        angle = Math.atan2(rightStickY, rightStickX);
+        
+        // S'assurer que l'angle est un nombre valide
+        if (!isNaN(angle) && isFinite(angle)) {
+          // Mettre à jour la rotation du joueur
+          this.currentPlayer.setRotation(angle);
+          
+          // Envoi de la rotation au serveur
+          this.room.send('rotate', { rotation: angle });
+        }
+      }
+      // Si une manette est connectée, on ne revient PAS à la souris quand le joystick est relâché
+      return;
+    }
+
+    // Si aucune manette n'est connectée, utiliser la souris
+    // Mettre à jour la rotation du joueur en fonction de la position de la souris
+    const pointer = this.input.activePointer;
+    angle = Phaser.Math.Angle.Between(
+      this.currentPlayer.x,
+      this.currentPlayer.y,
+      pointer.worldX,
+      pointer.worldY
+    );
+    
+    // S'assurer que l'angle est un nombre valide
+    if (!isNaN(angle) && isFinite(angle)) {
+      // Mettre à jour la rotation du joueur
+      this.currentPlayer.setRotation(angle);
+      
+      // Envoi de la rotation au serveur
+      this.room.send('rotate', { rotation: angle });
     }
   }
 
@@ -1948,6 +2072,24 @@ export class GameScene extends Phaser.Scene {
           if (tile && tile.properties && tile.properties.collides) {
             console.log(`Objet à (${x}, ${y}) a la propriété collides = ${tile.properties.collides}`);
           }
+        }
+      }
+    }
+
+    // Vérifier si le joueur se trouve sur une tuile avec des propriétés spéciales
+    if (this.currentPlayer && this.collisionLayer && this.tileset) {
+      // Obtenir la position des tuiles sous le joueur
+      const tileX = Math.floor(this.currentPlayer.x / this.tileset.tileWidth);
+      const tileY = Math.floor(this.currentPlayer.y / this.tileset.tileHeight);
+      
+      // Obtenir la tuile à cette position
+      const tile = this.collisionLayer.getTileAt(tileX, tileY);
+      
+      // Vérifier si la tuile a des propriétés
+      if (tile && tile.properties && tile.properties.isWater) {
+        // Appliquer l'effet d'eau (ralentir le joueur)
+        if (this.currentPlayer.body) {
+          this.currentPlayer.setVelocity(this.currentPlayer.body.velocity.x * 0.9, this.currentPlayer.body.velocity.y * 0.9);
         }
       }
     }
@@ -2059,5 +2201,44 @@ export class GameScene extends Phaser.Scene {
     this.playerIndicator.clear();
     this.playerIndicator.fillStyle(0xff0000, 1); // Rouge pour le joueur actuel
     this.playerIndicator.fillCircle(this.currentPlayer.x, this.currentPlayer.y, 5);
+  }
+
+  // Afficher les informations sur les contrôles de la manette
+  private showGamepadInfo(gamepadId: string) {
+    // Supprimer l'ancien texte s'il existe
+    this.hideGamepadInfo();
+    
+    // Déterminer le type de manette
+    const isPlayStation = gamepadId.toLowerCase().includes('playstation') || gamepadId.toLowerCase().includes('ps');
+    const controlsText = isPlayStation 
+      ? 'Manette PlayStation détectée!\nDéplacement: L3\nOrientation: R3\nTir: R2\nRecharger: Cercle'
+      : 'Manette Xbox détectée!\nDéplacement: L3\nOrientation: R3\nTir: RT\nRecharger: B';
+    
+    // Créer le texte d'information
+    this.gamepadInfoText = this.add.text(10, 120, controlsText, {
+      fontSize: '16px',
+      color: '#ffffff',
+      backgroundColor: '#000000',
+      padding: { x: 10, y: 5 }
+    });
+    this.gamepadInfoText.setDepth(1000);
+    
+    // Ajouter le texte à la couche UI
+    if (this.uiLayer) {
+      this.uiLayer.add(this.gamepadInfoText);
+    }
+    
+    // Faire disparaître le texte après 10 secondes
+    this.time.delayedCall(10000, () => {
+      this.hideGamepadInfo();
+    });
+  }
+  
+  // Cacher les informations sur les contrôles de la manette
+  private hideGamepadInfo() {
+    if (this.gamepadInfoText) {
+      this.gamepadInfoText.destroy();
+      this.gamepadInfoText = null;
+    }
   }
 } 

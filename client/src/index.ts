@@ -24,6 +24,9 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
+  input: {
+    gamepad: true  // Activer le support des manettes
+  },
   scene: [BootScene, MenuScene, GameScene, GameOverScene]
 };
 

@@ -117,6 +117,10 @@ export class GameScene extends Phaser.Scene {
   private joystickDeadZone: number = 0.2;
   private gamepadInfoText: Phaser.GameObjects.Text | null = null;
 
+  // Propriétés pour le débogage
+  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  private showDebugColliders: boolean = false; // Paramètre pour activer/désactiver le débogage des colliders
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -457,6 +461,24 @@ export class GameScene extends Phaser.Scene {
         this.reloadWeapon();
       }
     });
+
+    // Initialisation du débogage
+    this.debugGraphics = this.add.graphics();
+    this.debugGraphics.setDepth(200); // Au-dessus de tout pour être visible
+    
+    // Touche pour activer/désactiver l'affichage des colliders (F3)
+    if (this.input && this.input.keyboard) {
+      this.input.keyboard.on('keydown-F3', () => {
+        this.showDebugColliders = !this.showDebugColliders;
+        console.log(`Débogage des colliders ${this.showDebugColliders ? 'activé' : 'désactivé'}`);
+        
+        if (this.showDebugColliders && this.debugGraphics) {
+          this.visualizeColliders();
+        } else if (this.debugGraphics) {
+          this.debugGraphics.clear();
+        }
+      });
+    }
   }
 
   update() {
@@ -539,6 +561,11 @@ export class GameScene extends Phaser.Scene {
 
     // Mettre à jour le zoom de la minimap en fonction de la taille de la zone sûre
     this.updateMinimapZoom();
+
+    // Mettre à jour la visualisation des colliders si le débogage est activé
+    if (this.showDebugColliders && this.debugGraphics) {
+      this.visualizeColliders();
+    }
   }
 
   shutdown() {
@@ -871,44 +898,100 @@ export class GameScene extends Phaser.Scene {
 
       // Ajout de la balle à la liste des balles
       this.bullets.set(bulletId, bulletSprite);
+      
+      // Fonction pour créer un effet d'impact lors d'une collision
+      const createImpactEffect = (x: number, y: number) => {
+        // Créer un effet de particules pour l'impact
+        const particles = this.add.particles(x, y, 'bullet', {
+          speed: 200,
+          scale: { start: 0.6, end: 0 },
+          blendMode: 'SCREEN',
+          lifespan: 150,
+          gravityY: 300,
+          quantity: 10,
+          maxParticles: 10
+        });
+        
+        // Détruire l'émetteur après un court délai
+        this.time.delayedCall(200, () => {
+          particles.destroy();
+        });
+      };
 
       // Ajout de la collision entre la balle et la couche de collision
       this.physics.add.collider(bulletSprite, this.groundLayer, () => {
+        // Créer un effet d'impact
+        createImpactEffect(bulletSprite.x, bulletSprite.y);
+        
         // Supprimer la balle lorsqu'elle touche un mur
         this.room.send('removeBullet', { bulletId });
+        
+        // Supprimer le sprite localement aussi pour une réaction immédiate
+        bulletSprite.destroy();
+        this.bullets.delete(bulletId);
       });
 
       // Ajout de la collision entre la balle et la couche d'objets si elle existe
       if (this.collisionLayer) {
         this.physics.add.collider(bulletSprite, this.collisionLayer, () => {
+          // Créer un effet d'impact
+          createImpactEffect(bulletSprite.x, bulletSprite.y);
+          
           // Supprimer la balle lorsqu'elle touche un objet
           this.room.send('removeBullet', { bulletId });
+          
+          // Supprimer le sprite localement aussi
+          bulletSprite.destroy();
+          this.bullets.delete(bulletId);
         });
       }
 
       // Ajout de la collision entre la balle et la couche de détails si elle existe
-      const detailsLayer = this.map.getLayer('Details');
-      if (detailsLayer && detailsLayer.tilemapLayer) {
-        this.physics.add.collider(bulletSprite, detailsLayer.tilemapLayer, () => {
+      if (this.detailsLayer) {
+        this.physics.add.collider(bulletSprite, this.detailsLayer, () => {
+          // Créer un effet d'impact
+          createImpactEffect(bulletSprite.x, bulletSprite.y);
+          
           // Supprimer la balle lorsqu'elle touche un détail
           this.room.send('removeBullet', { bulletId });
+          
+          // Supprimer le sprite localement aussi
+          bulletSprite.destroy();
+          this.bullets.delete(bulletId);
         });
       }
 
       // Mise à jour de la position de la balle lorsqu'elle change
       bullet.onChange(() => {
-        bulletSprite.setPosition(bullet.x, bullet.y);
-        bulletSprite.setRotation(bullet.rotation);
+        // Mettre à jour la position seulement si le sprite existe encore
+        if (bulletSprite.active) {
+          bulletSprite.setPosition(bullet.x, bullet.y);
+          bulletSprite.setRotation(bullet.rotation);
+        }
       });
     });
-
+    
     // Gestion de la suppression des balles
     this.room.state.bullets.onRemove((bullet: Bullet, bulletId: string) => {
-      console.log(`Balle ${bulletId} supprimée`);
-
-      const sprite = this.bullets.get(bulletId);
-      if (sprite) {
-        sprite.destroy();
+      const bulletSprite = this.bullets.get(bulletId);
+      if (bulletSprite) {
+        // Créer un petit effet d'impact si la balle est supprimée par le serveur
+        const particles = this.add.particles(bulletSprite.x, bulletSprite.y, 'bullet', {
+          speed: 100,
+          scale: { start: 0.4, end: 0 },
+          blendMode: 'ADD',
+          lifespan: 100,
+          quantity: 5,
+          maxParticles: 5
+        });
+        
+        // Détruire l'émetteur après un court délai
+        this.time.delayedCall(150, () => {
+          particles.destroy();
+        });
+        
+        // Supprimer le sprite
+        bulletSprite.destroy();
         this.bullets.delete(bulletId);
       }
     });
@@ -2318,79 +2401,76 @@ export class GameScene extends Phaser.Scene {
       }
     };
     
+    // Créer un tableau temporaire pour stocker les tuiles à traiter
+    const tileColliders: Array<{x: number, y: number, width: number, height: number}> = [];
+    
     // 1. Parcourir toutes les couches de tuiles avec des collisions
     const layers = [this.groundLayer, this.collisionLayer, this.detailsLayer].filter(layer => !!layer);
     
-    // Pour chaque couche, nous allons essayer de regrouper les tuiles adjacentes
-    // pour réduire le nombre de colliders envoyés au serveur
     layers.forEach(layer => {
-      // Créer une grille pour marquer les tuiles déjà traitées
-      const gridWidth = layer.width;
-      const gridHeight = layer.height;
-      const visited = Array(gridHeight).fill(0).map(() => Array(gridWidth).fill(false));
-      
-      // Fonction pour vérifier si une tuile a une collision
-      const hasTileCollision = (x: number, y: number): boolean => {
-        if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) return false;
-        const tile = layer.getTileAt(x, y);
-        return tile && tile.properties && tile.properties.collides;
-      };
-      
-      // Parcourir la grille et trouver des zones de collision
-      for (let y = 0; y < gridHeight; y++) {
-        for (let x = 0; x < gridWidth; x++) {
-          // Ignorer les tuiles déjà visitées ou sans collision
-          if (visited[y][x] || !hasTileCollision(x, y)) continue;
-          
-          // Trouver la taille maximale du rectangle de tuiles adjacentes avec collision
-          let width = 1;
-          let height = 1;
-          
-          // Élargir horizontalement
-          while (x + width < gridWidth && hasTileCollision(x + width, y) && !visited[y][x + width]) {
-            width++;
-          }
-          
-          // Puis élargir verticalement
-          let canExpand = true;
-          while (canExpand && y + height < gridHeight) {
-            // Vérifier que toute la nouvelle ligne a des tuiles avec collision
-            for (let i = 0; i < width; i++) {
-              if (!hasTileCollision(x + i, y + height) || visited[y + height][x + i]) {
-                canExpand = false;
-                break;
-              }
-            }
-            
-            if (canExpand) {
-              height++;
-            }
-          }
-          
-          // Marquer toutes les tuiles de ce rectangle comme visitées
-          for (let j = 0; j < height; j++) {
-            for (let i = 0; i < width; i++) {
-              visited[y + j][x + i] = true;
-            }
-          }
-          
-          // Calculer la position centrale et le rayon de cette zone
+      // Pour chaque couche, parcourir toutes les tuiles
+      for (let y = 0; y < layer.height; y++) {
+        for (let x = 0; x < layer.width; x++) {
           const tile = layer.getTileAt(x, y);
-          if (!tile) continue;
           
-          const centerX = tile.pixelX + (tile.width * width / 2);
-          const centerY = tile.pixelY + (tile.height * height / 2);
-          
-          // Pour le rayon, utiliser la moitié de la diagonale du rectangle
-          const radius = Math.sqrt(Math.pow(tile.width * width, 2) + Math.pow(tile.height * height, 2)) / 2;
-          
-          // Signaler cette zone au serveur
-          reportCollider(centerX, centerY, radius);
+          if (tile && tile.properties && tile.properties.collides) {
+            // Ajouter cette tuile à la liste des tuiles à traiter
+            tileColliders.push({
+              x: tile.pixelX,
+              y: tile.pixelY,
+              width: tile.width,
+              height: tile.height
+            });
+          }
         }
       }
     });
     
-    // 2. Signaler les objets avec des collisions (comme des murs, des arbres, etc.)
+    // 2. Optimiser les colliders en créant des représentations plus précises
+    
+    // Pour chaque tuile de collision, créer un collider précis
+    tileColliders.forEach(tile => {
+      // Créer 4 colliders plus petits pour les coins de la tuile
+      // Cela donne une meilleure précision pour les passages étroits
+      const cornerSize = Math.min(tile.width, tile.height) / 4;
+      
+      // Coin supérieur gauche
+      reportCollider(
+        tile.x + cornerSize,
+        tile.y + cornerSize,
+        cornerSize
+      );
+      
+      // Coin supérieur droit
+      reportCollider(
+        tile.x + tile.width - cornerSize,
+        tile.y + cornerSize,
+        cornerSize
+      );
+      
+      // Coin inférieur gauche
+      reportCollider(
+        tile.x + cornerSize,
+        tile.y + tile.height - cornerSize,
+        cornerSize
+      );
+      
+      // Coin inférieur droit
+      reportCollider(
+        tile.x + tile.width - cornerSize,
+        tile.y + tile.height - cornerSize,
+        cornerSize
+      );
+      
+      // Centre de la tuile avec un rayon légèrement réduit
+      reportCollider(
+        tile.x + (tile.width / 2),
+        tile.y + (tile.height / 2),
+        (Math.min(tile.width, tile.height) / 2) * 0.7 // Rayon réduit à 70% pour les passages
+      );
+    });
+    
+    // 3. Traiter les objets avec des collisions (comme des murs, des arbres, etc.)
     const objectLayers = this.map.objects;
     
     if (objectLayers) {
@@ -2410,22 +2490,48 @@ export class GameScene extends Phaser.Scene {
                 // Calculer la position centrale de l'objet
                 const objX = object.x || 0;
                 const objY = object.y || 0;
-                const centerX = objX + (object.width ? object.width / 2 : 0);
-                const centerY = objY + (object.height ? object.height / 2 : 0);
-                
-                // Déterminer un rayon approprié pour l'objet
-                let radius;
                 
                 if (object.width && object.height) {
-                  // Pour les rectangles, utiliser la moitié de la diagonale comme rayon
-                  radius = Math.sqrt(Math.pow(object.width, 2) + Math.pow(object.height, 2)) / 2;
+                  // Pour les objets rectangulaires, créer plusieurs colliders plus petits
+                  // Cela permet de mieux définir les passages
+                  const segmentWidth = object.width / 3;
+                  const segmentHeight = object.height / 3;
+                  
+                  // Créer 4 colliders aux coins
+                  reportCollider(
+                    objX + segmentWidth / 2,
+                    objY + segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  
+                  reportCollider(
+                    objX + object.width - segmentWidth / 2,
+                    objY + segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  
+                  reportCollider(
+                    objX + segmentWidth / 2,
+                    objY + object.height - segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  
+                  reportCollider(
+                    objX + object.width - segmentWidth / 2,
+                    objY + object.height - segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  
+                  // Centre
+                  reportCollider(
+                    objX + object.width / 2,
+                    objY + object.height / 2,
+                    Math.min(object.width, object.height) / 4
+                  );
                 } else {
-                  // Pour les points, utiliser un rayon par défaut
-                  radius = 32;
+                  // Pour les points, utiliser un rayon par défaut réduit
+                  reportCollider(objX, objY, 24); // Réduit de 32 à 24
                 }
-                
-                // Signaler ce collider au serveur
-                reportCollider(centerX, centerY, radius);
               }
             }
           });
@@ -2434,5 +2540,134 @@ export class GameScene extends Phaser.Scene {
     }
     
     console.log("Analyse des colliders terminée.");
+  }
+
+  // Méthode pour visualiser les colliders
+  private visualizeColliders() {
+    // Effacer les graphiques précédents
+    this.debugGraphics?.clear();
+    
+    // Dessiner les zones de collision des tuiles
+    this.debugGraphics?.lineStyle(1, 0xff0000, 0.5);
+    
+    // Dessiner les colliders des couches de tuiles
+    const layers = [this.groundLayer, this.collisionLayer, this.detailsLayer].filter(layer => !!layer);
+    
+    layers.forEach(layer => {
+      for (let y = 0; y < layer.height; y++) {
+        for (let x = 0; x < layer.width; x++) {
+          const tile = layer.getTileAt(x, y);
+          
+          if (tile && tile.properties && tile.properties.collides) {
+            // Dessiner le contour de la tuile
+            this.debugGraphics?.strokeRect(tile.pixelX, tile.pixelY, tile.width, tile.height);
+            
+            // Dessiner les 5 colliders par tuile (les coins et le centre)
+            const cornerSize = Math.min(tile.width, tile.height) / 4;
+            
+            // Coins
+            this.debugGraphics?.lineStyle(1, 0x00ff00, 0.7);
+            this.debugGraphics?.strokeCircle(
+              tile.pixelX + cornerSize,
+              tile.pixelY + cornerSize,
+              cornerSize
+            );
+            this.debugGraphics?.strokeCircle(
+              tile.pixelX + tile.width - cornerSize,
+              tile.pixelY + cornerSize,
+              cornerSize
+            );
+            this.debugGraphics?.strokeCircle(
+              tile.pixelX + cornerSize,
+              tile.pixelY + tile.height - cornerSize,
+              cornerSize
+            );
+            this.debugGraphics?.strokeCircle(
+              tile.pixelX + tile.width - cornerSize,
+              tile.pixelY + tile.height - cornerSize,
+              cornerSize
+            );
+            
+            // Centre
+            this.debugGraphics?.lineStyle(1, 0x0000ff, 0.7);
+            this.debugGraphics?.strokeCircle(
+              tile.pixelX + (tile.width / 2),
+              tile.pixelY + (tile.height / 2),
+              (Math.min(tile.width, tile.height) / 2) * 0.7
+            );
+          }
+        }
+      }
+    });
+    
+    // Dessiner les colliders des objets
+    const objectLayers = this.map.objects;
+    
+    if (objectLayers) {
+      objectLayers.forEach(objectLayer => {
+        const objects = objectLayer.objects;
+        
+        if (objects) {
+          objects.forEach(object => {
+            if (object.properties) {
+              const hasCollision = object.properties.find((p: { name: string, value: boolean }) => 
+                p.name === "collides" && p.value === true);
+              const isObstacle = object.properties.find((p: { name: string, value: boolean }) => 
+                p.name === "obstacle" && p.value === true);
+                
+              if (hasCollision || isObstacle) {
+                const objX = object.x || 0;
+                const objY = object.y || 0;
+                
+                if (object.width && object.height) {
+                  // Contour de l'objet
+                  this.debugGraphics?.lineStyle(1, 0xff00ff, 0.5);
+                  this.debugGraphics?.strokeRect(objX, objY, object.width, object.height);
+                  
+                  // Colliders
+                  const segmentWidth = object.width / 3;
+                  const segmentHeight = object.height / 3;
+                  
+                  // Coins
+                  this.debugGraphics?.lineStyle(1, 0xffff00, 0.7);
+                  this.debugGraphics?.strokeCircle(
+                    objX + segmentWidth / 2,
+                    objY + segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  this.debugGraphics?.strokeCircle(
+                    objX + object.width - segmentWidth / 2,
+                    objY + segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  this.debugGraphics?.strokeCircle(
+                    objX + segmentWidth / 2,
+                    objY + object.height - segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  this.debugGraphics?.strokeCircle(
+                    objX + object.width - segmentWidth / 2,
+                    objY + object.height - segmentHeight / 2,
+                    Math.min(segmentWidth, segmentHeight) / 2
+                  );
+                  
+                  // Centre
+                  this.debugGraphics?.lineStyle(1, 0x00ffff, 0.7);
+                  this.debugGraphics?.strokeCircle(
+                    objX + object.width / 2,
+                    objY + object.height / 2,
+                    Math.min(object.width, object.height) / 4
+                  );
+                } else {
+                  // Point
+                  this.debugGraphics?.lineStyle(1, 0xffffff, 0.7);
+                  this.debugGraphics?.strokeCircle(objX, objY, 24);
+                }
+              }
+            }
+          });
+        }
+      });
+    }
   }
 } 

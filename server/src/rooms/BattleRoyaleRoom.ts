@@ -221,7 +221,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
               magazineCount: player.magazineCount 
             });
             
-            return;
           } else {
             // Attribuer l'arme au joueur
             player.weapon = weapon.type;
@@ -243,7 +242,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
             this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
             this.broadcast("magazineUpdate", { playerId: client.sessionId, magazineCount: player.magazineCount });
             
-            return;
           }
           
           // Supprimer l'arme de la carte
@@ -304,7 +302,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
             this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
             this.broadcast("magazineUpdate", { playerId: client.sessionId, magazineCount: player.magazineCount });
             
-            return;
           }
         }, reloadTime);
       } else {
@@ -314,7 +311,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           message: "Aucun chargeur disponible"
         });
         
-        return;
       }
     });
     
@@ -330,7 +326,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
       this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
       
-      return;
     });
 
     // Génération des armes sur la carte

@@ -238,7 +238,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         );
         
         // Vérifier si le joueur est assez proche de l'arme
-        if (distance <= 100) {
+        if (distance <= 150) {
           // Si le joueur a déjà la même arme, ajouter un chargeur
           if (player.weapon === weapon.type) {
             player.magazineCount += 1;

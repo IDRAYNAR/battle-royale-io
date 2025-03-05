@@ -65,6 +65,9 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   
   // Nombre minimum d'armes sur la carte
   private minWeapons: number = 15;
+  
+  // Nombre maximum d'armes sur la carte
+  private maxWeapons: number = 20;
 
   // Liste des positions des obstacles avec collider
   private colliderPositions: Array<{x: number, y: number, radius: number}> = [];
@@ -395,6 +398,12 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           setTimeout(() => {
             console.log("Vérification initiale des positions d'armes...");
             this.checkWeaponPositions();
+            
+            // Configurer une vérification périodique des positions d'armes
+            // toutes les 30 secondes
+            setInterval(() => {
+              this.checkWeaponPositions();
+            }, 30000);
           }, 2000); // Attendre 2 secondes pour recevoir plus de colliders
         }
       }
@@ -484,6 +493,14 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     
     // Vérifier qu'il y a toujours le nombre minimum d'armes sur la carte
     this.ensureMinimumWeapons();
+    
+    // Vérifier et corriger les positions des armes qui seraient en dehors de la zone de jeu
+    this.checkWeaponsOutsideSafeZone();
+    
+    // Vérifier périodiquement les armes coincées (environ toutes les 10 secondes)
+    if (Math.random() < 0.01) {
+      this.checkWeaponPositions();
+    }
     
     if (this.zoneActive) {
       this.checkSafeZone();
@@ -737,6 +754,12 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         radius: this.state.safeZoneRadius,
         nextShrinkTime: this.state.nextShrinkTime
       });
+      
+      // Générer de nouvelles armes dans la zone réduite
+      this.generateNewWeaponsInShrinkingZone(newRadius);
+      
+      // Vérifier et corriger les positions des armes existantes
+      this.checkWeaponPositions();
     } else {
       // Notification aux clients du temps restant
       this.broadcast("zoneTimer", {
@@ -744,24 +767,145 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       });
     }
   }
+  
+  // Génération de nouvelles armes dans la zone qui rétrécit
+  private generateNewWeaponsInShrinkingZone(newRadius: number) {
+    // Calculer le nombre d'armes à générer en fonction du rayon
+    // Plus la zone est petite, moins d'armes seront générées
+    const baseCount = 3; // Nombre minimum d'armes à générer
+    const radiusFactor = Math.min(1, newRadius / 1000); // Facteur entre 0.2 et 1 basé sur le rayon
+    const weaponsToAdd = Math.max(1, Math.floor(baseCount * radiusFactor));
+    
+    console.log(`Génération de ${weaponsToAdd} nouvelles armes dans la zone rétrécie (rayon: ${newRadius})`);
+    
+    // Générer les armes
+    for (let i = 0; i < weaponsToAdd; i++) {
+      // Générer dans un secteur aléatoire
+      const sectorIndex = Math.floor(Math.random() * 8);
+      this.generateWeaponInSector(sectorIndex, 0); // variationLevel=0 pour rester proche du centre
+    }
+  }
 
   // Génération des armes sur la carte
   private generateWeapons(count: number) {
     const weaponTypes = ["pistol", "rifle", "shotgun"];
     
-    for (let i = 0; i < count; i++) {
-      this.generateSingleWeapon();
+    // Diviser la carte en zones pour répartir les armes uniformément
+    // Utilisons maintenant 4 quadrants principaux, plus la partie centrale, pour une meilleure répartition
+    const quadrants = [
+      { name: "Nord-Ouest", sectorStart: 0, sectorEnd: 1 },  // Quadrant nord-ouest (secteurs 0-1)
+      { name: "Nord-Est", sectorStart: 2, sectorEnd: 3 },    // Quadrant nord-est (secteurs 2-3)
+      { name: "Sud-Est", sectorStart: 4, sectorEnd: 5 },     // Quadrant sud-est (secteurs 4-5)
+      { name: "Sud-Ouest", sectorStart: 6, sectorEnd: 7 },   // Quadrant sud-ouest (secteurs 6-7)
+      { name: "Centre", sectorStart: -1, sectorEnd: -1 }     // Zone centrale (traitement spécial)
+    ];
+    
+    // Équilibrer les armes entre les quadrants
+    // Au moins 3 armes par quadrant principal si on génère 15 armes ou plus
+    const minPerQuadrant = count >= 15 ? 3 : Math.max(1, Math.floor(count / 5));
+    let remainingCount = count;
+    
+    // Placer le minimum d'armes dans chaque quadrant d'abord
+    for (const quadrant of quadrants) {
+      // Nombre d'armes à placer dans ce quadrant
+      let quadrantCount = Math.min(minPerQuadrant, remainingCount);
+      remainingCount -= quadrantCount;
+      
+      console.log(`Génération de ${quadrantCount} armes dans le quadrant ${quadrant.name}`);
+      
+      // Placer les armes dans ce quadrant
+      if (quadrant.name === "Centre") {
+        // Pour la zone centrale, placer les armes autour du centre avec une distance réduite
+        for (let i = 0; i < quadrantCount; i++) {
+          // Secteur aléatoire pour la variation
+          const randomSector = Math.floor(Math.random() * 8);
+          // Avec un niveau de variation réduit pour rester près du centre
+          this.generateWeaponInSector(randomSector, -1); // -1 indique une position centrale
+        }
+      } else {
+        // Pour les quadrants, répartir entre les secteurs correspondants
+        for (let i = 0; i < quadrantCount; i++) {
+          // Alterner entre les secteurs de ce quadrant
+          const sectorIndex = quadrant.sectorStart + (i % 2 === 0 ? 0 : 1);
+          // Niveau de variation pour distribuer dans le quadrant
+          const variationLevel = Math.floor(Math.random() * 3); // 0, 1 ou 2
+          this.generateWeaponInSector(sectorIndex, variationLevel);
+        }
+      }
     }
+    
+    // Distribuer les armes restantes aléatoirement
+    if (remainingCount > 0) {
+      console.log(`Distribution de ${remainingCount} armes restantes aléatoirement`);
+      
+      // Créer un tableau de secteurs aléatoires mais équilibrés
+      const randomSectors = [];
+      for (let i = 0; i < 8; i++) {
+        randomSectors.push(i);
+      }
+      // Mélanger les secteurs
+      randomSectors.sort(() => Math.random() - 0.5);
+      
+      // Distribuer les armes restantes
+      for (let i = 0; i < remainingCount; i++) {
+        const sectorIndex = randomSectors[i % 8];
+        const variationLevel = Math.floor(Math.random() * 3);
+        this.generateWeaponInSector(sectorIndex, variationLevel);
+      }
+    }
+    
+    console.log(`${count} armes générées avec une répartition équilibrée sur la carte`);
+    
+    // Effectuer une vérification immédiate des positions d'armes pour s'assurer qu'aucune n'est coincée
+    setTimeout(() => {
+      this.checkWeaponPositions();
+    }, 500);
   }
   
-  // Génération d'une seule arme
-  private generateSingleWeapon() {
+  // Génération d'une arme dans un secteur spécifique
+  private generateWeaponInSector(sectorIndex: number, variationLevel: number = 0) {
     const weapon = new Weapon();
     
-    // Générer une position aléatoire sur la carte
-    const position = this.findSafeSpawnPosition();
-    weapon.x = position.x;
-    weapon.y = position.y;
+    // Calculer l'angle central du secteur (en radians)
+    const sectorAngle = (sectorIndex * Math.PI / 4) + (Math.random() * Math.PI / 4); // Entre sectorIndex*π/4 et (sectorIndex+1)*π/4
+    
+    // Calculer la distance en fonction du niveau de variation
+    let distanceFactor: number;
+    
+    if (variationLevel === -1) {
+      // Position centrale - rester près du centre (10-40% du rayon)
+      distanceFactor = 0.1 + (Math.random() * 0.3);
+    } else {
+      // Position normale - s'éloigner selon le niveau de variation
+      // variationLevel 0: 30-60% du rayon
+      // variationLevel 1: 50-70% du rayon
+      // variationLevel 2: 60-90% du rayon
+      const minFactors = [0.3, 0.5, 0.6];
+      const maxFactors = [0.6, 0.7, 0.9];
+      
+      const level = Math.min(2, Math.max(0, variationLevel)); // Assurer que le niveau est entre 0 et 2
+      const minFactor = minFactors[level];
+      const maxFactor = maxFactors[level];
+      
+      distanceFactor = minFactor + (Math.random() * (maxFactor - minFactor));
+    }
+    
+    // Calculer la position dans le secteur
+    const distance = this.state.safeZoneRadius * distanceFactor;
+    const x = this.state.safeZoneX + Math.cos(sectorAngle) * distance;
+    const y = this.state.safeZoneY + Math.sin(sectorAngle) * distance;
+    
+    // Vérifier si la position est valide (pas sur un collider)
+    if (this.isPositionValid(x, y)) {
+      // Position valide, utiliser directement
+      weapon.x = x;
+      weapon.y = y;
+    } else {
+      // Position non valide, chercher une position alternative dans la zone sûre
+      const position = this.findPositionInSafeZone();
+      weapon.x = position.x;
+      weapon.y = position.y;
+    }
     
     // Déterminer le type d'arme aléatoirement
     const weaponTypes = ["pistol", "rifle", "shotgun"];
@@ -798,22 +942,172 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     // Ajouter l'arme à l'état du jeu
     this.state.weapons.set(weaponId, weapon);
     
+    const quadrantName = this.getQuadrantName(sectorIndex);
+    console.log(`Arme de type ${weapon.type} générée dans le quadrant ${quadrantName} à la position (${Math.round(weapon.x)}, ${Math.round(weapon.y)})`);
+    
     return weaponId;
   }
   
-  // Vérification du nombre d'armes sur la carte
+  // Obtenir le nom du quadrant à partir de l'index du secteur
+  private getQuadrantName(sectorIndex: number): string {
+    if (sectorIndex === -1) return "Centre";
+    
+    const quadrants = [
+      "Nord-Ouest", "Nord-Ouest", // Secteurs 0-1
+      "Nord-Est", "Nord-Est",     // Secteurs 2-3
+      "Sud-Est", "Sud-Est",       // Secteurs 4-5
+      "Sud-Ouest", "Sud-Ouest"    // Secteurs 6-7
+    ];
+    
+    return quadrants[sectorIndex];
+  }
+  
+  // Trouver une position dans la zone sûre actuelle qui évite les colliders
+  private findPositionInSafeZone(): { x: number, y: number } {
+    const maxAttempts = 150; // Nombre suffisant de tentatives
+    const safeZoneRadius = this.state.safeZoneRadius;
+    const safeZoneX = this.state.safeZoneX;
+    const safeZoneY = this.state.safeZoneY;
+    
+    // Essayer de trouver une position valide qui n'est pas sur un collider
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Calculer un angle aléatoire
+      const angle = Math.random() * Math.PI * 2;
+      
+      // Utiliser une distribution non uniforme qui favorise les positions plus proches du centre
+      // pour augmenter les chances de trouver une position valide dans une zone sûre réduite
+      const randomFactor = Math.random();
+      const distanceFactor = Math.pow(randomFactor, 0.5); // Distribution qui favorise les valeurs plus faibles
+      
+      // Calculer la distance par rapport au centre de la zone sûre (75% du rayon max)
+      const distance = distanceFactor * (safeZoneRadius * 0.75);
+      
+      // Calculer la position
+      const x = safeZoneX + Math.cos(angle) * distance;
+      const y = safeZoneY + Math.sin(angle) * distance;
+      
+      // Vérifier si la position est valide (pas sur un collider)
+      if (this.isPositionValid(x, y)) {
+        console.log(`Position valide trouvée dans la zone sûre: (${x}, ${y})`);
+        return { x, y };
+      }
+    }
+    
+    // Si nous n'avons pas trouvé de position valide, générer une position aléatoire
+    // dans la zone sûre sans vérifier les colliders
+    console.log("Aucune position valide trouvée, génération aléatoire dans la zone sûre");
+    
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * (safeZoneRadius * 0.7);
+    
+    return {
+      x: safeZoneX + Math.cos(angle) * distance,
+      y: safeZoneY + Math.sin(angle) * distance
+    };
+  }
+  
+  // Vérifier si une position est valide (pas sur un collider)
+  private isPositionValid(x: number, y: number): boolean {
+    // Vérifier si la position est en dehors de la carte
+    if (x < 0 || x > this.state.mapWidth || y < 0 || y > this.state.mapHeight) {
+      return false;
+    }
+    
+    // Vérifier si la position est sur un collider
+    for (const collider of this.colliderPositions) {
+      const distanceToCollider = Math.sqrt(
+        Math.pow(x - collider.x, 2) + 
+        Math.pow(y - collider.y, 2)
+      );
+      
+      // Marge de sécurité augmentée pour éloigner les armes des murs
+      // Utiliser une marge plus importante (1.5) pour vraiment éviter les colliders
+      const minDistance = collider.radius * 1.5;
+      
+      if (distanceToCollider < minDistance) {
+        return false;
+      }
+    }
+    
+    // Vérifier également la proximité avec d'autres colliders (objets adjacents)
+    // Si deux colliders sont trop proches l'un de l'autre, éviter de placer une arme entre eux
+    if (this.isPotentiallyTrappedBetweenColliders(x, y)) {
+      return false;
+    }
+    
+    return true;
+  }
+  
+  // Vérifier si une position pourrait être piégée entre plusieurs colliders
+  private isPotentiallyTrappedBetweenColliders(x: number, y: number): boolean {
+    // Si moins de 2 colliders, pas de risque d'être piégé entre eux
+    if (this.colliderPositions.length < 2) {
+      return false;
+    }
+    
+    // Compter le nombre de colliders à proximité (avec une distance augmentée)
+    let nearbyColliders = 0;
+    const proximityThreshold = 150; // Distance à laquelle on considère qu'un collider est "proche"
+    
+    for (const collider of this.colliderPositions) {
+      const distanceToCollider = Math.sqrt(
+        Math.pow(x - collider.x, 2) + 
+        Math.pow(y - collider.y, 2)
+      );
+      
+      if (distanceToCollider < collider.radius + proximityThreshold) {
+        nearbyColliders++;
+        
+        // Si on détecte plus de 2 colliders à proximité, c'est probablement un espace restreint
+        if (nearbyColliders >= 2) {
+          return true;
+        }
+      }
+    }
+    
+    // Si moins de 2 colliders à proximité, probablement pas piégé
+    return false;
+  }
+
+  // Vérification et gestion du nombre d'armes sur la carte
   private ensureMinimumWeapons() {
     // Vérifier et corriger la position des armes existantes
     this.checkWeaponPositions();
     
-    // Ajouter de nouvelles armes si nécessaire
+    // Gérer le nombre d'armes sur la carte
     const currentWeaponCount = this.state.weapons.size;
+    
+    // Si le nombre d'armes est insuffisant, en ajouter
     if (currentWeaponCount < this.minWeapons) {
       const weaponsToAdd = this.minWeapons - currentWeaponCount;
+      console.log(`Ajout de ${weaponsToAdd} armes pour atteindre le minimum requis de ${this.minWeapons}`);
       this.generateWeapons(weaponsToAdd);
+    } 
+    // Si le nombre d'armes est trop élevé, supprimer les excédents
+    else if (currentWeaponCount > this.maxWeapons) {
+      const weaponsToRemove = currentWeaponCount - this.maxWeapons;
+      console.log(`Suppression de ${weaponsToRemove} armes pour respecter le maximum de ${this.maxWeapons}`);
+      this.removeExcessWeapons(weaponsToRemove);
     }
   }
   
+  // Supprimer les armes excédentaires
+  private removeExcessWeapons(count: number) {
+    // Collecter tous les ID d'armes
+    const weaponIds: string[] = [];
+    this.state.weapons.forEach((_, weaponId) => {
+      weaponIds.push(weaponId);
+    });
+    
+    // Mélanger le tableau pour une suppression aléatoire
+    weaponIds.sort(() => Math.random() - 0.5);
+    
+    // Supprimer le nombre d'armes requis
+    for (let i = 0; i < Math.min(count, weaponIds.length); i++) {
+      this.state.weapons.delete(weaponIds[i]);
+    }
+  }
+
   // Vérification et correction des positions des armes existantes
   private checkWeaponPositions() {
     // Ne vérifier les positions que si nous avons des colliders
@@ -821,37 +1115,72 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       return;
     }
     
+    console.log(`Vérification des positions d'armes... (${this.state.weapons.size} armes, ${this.colliderPositions.length} colliders)`);
+    
+    // Compteurs pour les statistiques
+    let weaponsOutsideSafeZone = 0;
+    let weaponsInColliders = 0;
+    let weaponsTrappedBetweenColliders = 0;
+    
     // Parcourir toutes les armes
     this.state.weapons.forEach((weapon, weaponId) => {
-      // Vérifier si l'arme est dans un collider
-      let isInCollider = false;
+      // Vérifier d'abord si l'arme est dans la zone sûre
+      const distanceToCenter = Math.sqrt(
+        Math.pow(weapon.x - this.state.safeZoneX, 2) + 
+        Math.pow(weapon.y - this.state.safeZoneY, 2)
+      );
       
+      // Vérifier si l'arme est dans un collider ou trop proche d'un collider
+      let isInCollider = false;
       for (const collider of this.colliderPositions) {
         const distanceToCollider = Math.sqrt(
           Math.pow(weapon.x - collider.x, 2) + 
           Math.pow(weapon.y - collider.y, 2)
         );
         
-        if (distanceToCollider < collider.radius) {
+        // Utiliser la même marge que dans isPositionValid
+        const minDistance = collider.radius * 1.5;
+        
+        if (distanceToCollider < minDistance) {
           isInCollider = true;
           break;
         }
       }
       
-      // Si l'arme est dans un collider, la déplacer
-      if (isInCollider) {
-        console.log(`Arme ${weaponId} de type ${weapon.type} est dans un collider, déplacement...`);
+      // Vérifier si l'arme est piégée entre plusieurs colliders
+      const isTrapped = this.isPotentiallyTrappedBetweenColliders(weapon.x, weapon.y);
+      
+      // Si l'arme est hors de la zone sûre, dans un collider, ou piégée entre colliders, la déplacer
+      if (distanceToCenter > this.state.safeZoneRadius || isInCollider || isTrapped) {
+        let reason = "hors de la zone sûre";
+        if (isInCollider) {
+          reason = "trop proche d'un objet";
+          weaponsInColliders++;
+        } else if (isTrapped) {
+          reason = "coincée entre plusieurs objets";
+          weaponsTrappedBetweenColliders++;
+        } else {
+          weaponsOutsideSafeZone++;
+        }
         
-        // Trouver une nouvelle position
-        const newPosition = this.findSafeSpawnPosition();
+        console.log(`Arme ${weaponId} de type ${weapon.type} détectée ${reason}, déplacement...`);
+        
+        // Trouver une nouvelle position dans la zone sûre
+        const newPosition = this.findPositionInSafeZone();
         
         // Mettre à jour la position de l'arme
         weapon.x = newPosition.x;
         weapon.y = newPosition.y;
         
-        console.log(`Arme ${weaponId} déplacée à la nouvelle position: (${weapon.x}, ${weapon.y})`);
+        console.log(`Arme ${weaponId} déplacée à la nouvelle position: (${Math.round(weapon.x)}, ${Math.round(weapon.y)})`);
       }
     });
+    
+    // Afficher un résumé des corrections effectuées
+    const totalCorrected = weaponsOutsideSafeZone + weaponsInColliders + weaponsTrappedBetweenColliders;
+    if (totalCorrected > 0) {
+      console.log(`Résumé des corrections d'armes: ${totalCorrected} armes déplacées (${weaponsOutsideSafeZone} hors zone, ${weaponsInColliders} dans objets, ${weaponsTrappedBetweenColliders} coincées)`);
+    }
   }
 
   // Génération d'un identifiant unique
@@ -888,15 +1217,16 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       });
       
       // Vérifier si la position est éloignée des éléments avec des colliders
-      const safeDistanceFromColliders = 50; // Distance minimale des éléments avec collider
-      
+      // Utiliser la même marge que dans isPositionValid
       for (const collider of this.colliderPositions) {
         const distanceToCollider = Math.sqrt(
           Math.pow(x - collider.x, 2) + 
           Math.pow(y - collider.y, 2)
         );
         
-        if (distanceToCollider < (collider.radius + safeDistanceFromColliders)) {
+        const minDistance = collider.radius * 1.25;
+        
+        if (distanceToCollider < minDistance) {
           isFarEnough = false;
           break;
         }
@@ -922,16 +1252,16 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       // Vérifier uniquement si la position est loin des colliders
       let isValidPosition = true;
       
-      // Réduire légèrement la marge pour accepter plus de positions
-      const minDistanceFromColliders = 30;
-      
       for (const collider of this.colliderPositions) {
         const distanceToCollider = Math.sqrt(
           Math.pow(x - collider.x, 2) + 
           Math.pow(y - collider.y, 2)
         );
         
-        if (distanceToCollider < (collider.radius + minDistanceFromColliders)) {
+        // Même marge que dans isPositionValid
+        const minDistance = collider.radius * 1.25;
+        
+        if (distanceToCollider < minDistance) {
           isValidPosition = false;
           break;
         }
@@ -1024,5 +1354,37 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     bullet.speed = speed;
     
     this.state.bullets.set(this.generateId(), bullet);
+  }
+
+  // Vérification des armes en dehors de la zone de jeu
+  private checkWeaponsOutsideSafeZone() {
+    // Ne vérifier que toutes les 5 secondes environ (environ chaque 300 cycles de jeu à 60 FPS)
+    if (Math.random() > 0.003) return;
+    
+    // Parcourir toutes les armes
+    let weaponsOutside = 0;
+    this.state.weapons.forEach((weapon, weaponId) => {
+      // Calculer la distance au centre de la zone sûre
+      const distanceToCenter = Math.sqrt(
+        Math.pow(weapon.x - this.state.safeZoneX, 2) + 
+        Math.pow(weapon.y - this.state.safeZoneY, 2)
+      );
+      
+      // Si l'arme est en dehors de la zone sûre, la déplacer
+      if (distanceToCenter > this.state.safeZoneRadius) {
+        weaponsOutside++;
+        
+        // Trouver une nouvelle position dans la zone sûre
+        const newPosition = this.findPositionInSafeZone();
+        
+        // Mettre à jour la position de l'arme
+        weapon.x = newPosition.x;
+        weapon.y = newPosition.y;
+      }
+    });
+    
+    if (weaponsOutside > 0) {
+      console.log(`${weaponsOutside} armes déplacées depuis l'extérieur de la zone de jeu`);
+    }
   }
 } 

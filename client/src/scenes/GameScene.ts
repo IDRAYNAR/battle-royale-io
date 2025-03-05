@@ -101,6 +101,11 @@ export class GameScene extends Phaser.Scene {
   // Variable pour suivre si un tir est en cours
   private isShooting: boolean = false;
 
+  // Add new properties for display layers
+  private gameLayer!: Phaser.GameObjects.Container;
+  private uiLayer!: Phaser.GameObjects.Container;
+  private notificationLayer!: Phaser.GameObjects.Container;
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -131,9 +136,26 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Créer des couches pour organiser les objets du jeu et l'interface utilisateur
+    // Nous utilisons ces conteneurs uniquement pour gérer ce qui est ignoré par la minimap
+    // mais les sprites physiques restent dans la scène principale
+    this.gameLayer = this.add.container(0, 0);
+    this.uiLayer = this.add.container(0, 0);
+    this.notificationLayer = this.add.container(0, 0);
+    
+    // Les conteneurs ne sont pas affectés par le défilement de la caméra par défaut, 
+    // donc nous définissons scrollFactor seulement pour la couche UI
+    this.uiLayer.setScrollFactor(0);
+    this.notificationLayer.setScrollFactor(0);
+    
+    // Définir des profondeurs appropriées pour chaque couche
+    this.gameLayer.setDepth(10); // Objets de jeu
+    this.uiLayer.setDepth(100);  // Interface utilisateur
+    this.notificationLayer.setDepth(200); // Notifications et messages temporaires
+
     // Initialisation de la zone sûre pour la minimap
     this.minimapSafeZone = this.add.graphics();
-
+    
     // Chargement de la map depuis les fichiers Tiled
     this.map = this.make.tilemap({ key: 'map' });
     const tileset = this.map.addTilesetImage('tilesheet_complete', 'tilesheet');
@@ -281,6 +303,7 @@ export class GameScene extends Phaser.Scene {
     // Cette bordure est visible dans l'interface mais ne fait pas partie de la minimap
     this.minimapBorder = minimapContainer;
     this.minimapBorder.setDepth(90); // Sous la minimap
+    this.uiLayer.add(this.minimapBorder);
     
     // Créer ensuite la minimap elle-même
     this.minimap = this.cameras.add(minimapPadding, minimapPadding, minimapSize, minimapSize);
@@ -290,13 +313,9 @@ export class GameScene extends Phaser.Scene {
     this.minimap.setName('minimap');
     this.minimap.setRoundPixels(true);
 
-    // Ignorer tous les éléments d'UI dans la minimap (y compris la bordure)
-    this.minimap.ignore(this.healthBar);
-    this.minimap.ignore(this.healthText);
-    this.minimap.ignore(this.playersAliveText);
-    this.minimap.ignore(this.weaponText);
-    this.minimap.ignore(this.zoneTimerText);
-    this.minimap.ignore(this.minimapBorder);
+    // Ignorer tous les éléments d'UI - maintenant on ignore les couches entières
+    this.minimap.ignore(this.uiLayer);
+    this.minimap.ignore(this.notificationLayer);
 
     // Ajout d'un indicateur pour le joueur sur la minimap
     this.playerIndicator = this.add.graphics();
@@ -368,6 +387,9 @@ export class GameScene extends Phaser.Scene {
 
     // Gérer les contrôles du joueur
     this.handlePlayerControls();
+
+    // Mettre à jour la position des joueurs sur la minimap
+    this.drawPlayersOnMinimap();
 
     // Vérifier les collisions avec les murs invisibles
     this.checkForInvisibleWalls();
@@ -467,27 +489,34 @@ export class GameScene extends Phaser.Scene {
       console.log(`Joueur ${sessionId} ajouté`);
 
       // Création du sprite du joueur
-      let sprite;
+      let sprite; // Utiliser let au lieu de const pour permettre la réaffectation
 
       // Utiliser un sprite différent pour le joueur actuel et les autres joueurs
       if (sessionId === this.room?.sessionId) {
-        // Commencer sans arme
+        // Commencer sans arme pour le joueur actuel
         sprite = this.physics.add.sprite(player.x, player.y, 'player_hold');
-        // Configurer la physique du joueur
         this.currentPlayer = sprite;
-        this.currentPlayer.setCollideWorldBounds(true);
-        this.currentPlayer.setBounce(0); // Pas de rebond
-        if (this.currentPlayer.body) {
-          this.currentPlayer.body.setSize(sprite.width * 0.7, sprite.height * 0.7); // Réduire la hitbox
+        
+        // Configurer la physique du joueur
+        sprite.setCollideWorldBounds(true);
+        sprite.setBounce(0); // Pas de rebond
+        if (sprite.body) {
+          sprite.body.setSize(sprite.width * 0.7, sprite.height * 0.7); // Réduire la hitbox
         }
       } else {
         sprite = this.physics.add.sprite(player.x, player.y, 'enemy');
-        // Définir la profondeur des autres joueurs pour qu'ils soient au-dessus des éléments du décor
-        sprite.setDepth(40);
       }
 
+      // Configurer le sprite du joueur
+      sprite.setData('health', player.health);
       sprite.setRotation(player.rotation);
-
+      
+      // Définir la profondeur pour qu'il soit au-dessus des éléments du décor
+      sprite.setDepth(40);
+      
+      // Ne pas ajouter les sprites physiques au gameLayer pour éviter les problèmes
+      // avec le moteur de physique
+      
       // Ajout du joueur à la liste des joueurs
       this.players.set(sessionId, sprite);
 
@@ -677,18 +706,20 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de l'état des armes
     this.room.state.weapons.onAdd((weapon: Weapon, weaponId: string) => {
-      console.log(`Arme ${weaponId} ajoutée`);
+      console.log(`Arme ${weaponId} ajoutée à la position ${weapon.x}, ${weapon.y}`);
 
       // Création du sprite de l'arme
-      const sprite = this.physics.add.sprite(weapon.x, weapon.y, weapon.type);
+      const weaponSprite = this.physics.add.sprite(weapon.x, weapon.y, weapon.type);
+      
+      // Ne pas ajouter les sprites physiques au gameLayer
       
       // Définir la profondeur de l'arme pour qu'elle soit au-dessus des éléments du décor
-      sprite.setDepth(35); // Entre les joueurs (40) et les détails (30)
+      weaponSprite.setDepth(35); // Entre les joueurs (40) et les détails (30)
 
       // Ajout d'un effet de flottement
       this.tweens.add({
-        targets: sprite,
-        y: sprite.y - 10,
+        targets: weaponSprite,
+        y: weaponSprite.y - 10,
         duration: 1000,
         ease: 'Sine.easeInOut',
         yoyo: true,
@@ -696,11 +727,11 @@ export class GameScene extends Phaser.Scene {
       });
 
       // Ajout de l'arme à la liste des armes
-      this.weapons.set(weaponId, sprite);
+      this.weapons.set(weaponId, weaponSprite);
       
       // Ajouter un overlap pour permettre au joueur de ramasser l'arme
       if (this.currentPlayer) {
-        this.physics.add.overlap(this.currentPlayer, sprite, () => {
+        this.physics.add.overlap(this.currentPlayer, weaponSprite, () => {
           // Envoyer un message au serveur pour ramasser l'arme
           this.room.send('pickupWeapon', { weaponId });
         });
@@ -720,30 +751,29 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de l'état des balles
     this.room.state.bullets.onAdd((bullet: Bullet, bulletId: string) => {
-      console.log(`Balle ${bulletId} ajoutée`);
-
       // Création du sprite de la balle
-      const sprite = this.physics.add.sprite(bullet.x, bullet.y, 'bullet');
-      sprite.setRotation(bullet.rotation);
+      const bulletSprite = this.physics.add.sprite(bullet.x, bullet.y, 'bullet');
+      
+      // Ne pas ajouter les sprites physiques au gameLayer
       
       // Définir la profondeur de la balle pour qu'elle soit au-dessus des éléments du décor
-      sprite.setDepth(35); // Même profondeur que les armes
+      bulletSprite.setDepth(35); // Même profondeur que les armes
 
       // Ajout d'un effet de traînée à la balle
-      this.addBulletTrail(sprite);
+      this.addBulletTrail(bulletSprite);
 
       // Ajout de la balle à la liste des balles
-      this.bullets.set(bulletId, sprite);
+      this.bullets.set(bulletId, bulletSprite);
 
       // Ajout de la collision entre la balle et la couche de collision
-      this.physics.add.collider(sprite, this.groundLayer, () => {
+      this.physics.add.collider(bulletSprite, this.groundLayer, () => {
         // Supprimer la balle lorsqu'elle touche un mur
         this.room.send('removeBullet', { bulletId });
       });
 
       // Ajout de la collision entre la balle et la couche d'objets si elle existe
       if (this.collisionLayer) {
-        this.physics.add.collider(sprite, this.collisionLayer, () => {
+        this.physics.add.collider(bulletSprite, this.collisionLayer, () => {
           // Supprimer la balle lorsqu'elle touche un objet
           this.room.send('removeBullet', { bulletId });
         });
@@ -752,7 +782,7 @@ export class GameScene extends Phaser.Scene {
       // Ajout de la collision entre la balle et la couche de détails si elle existe
       const detailsLayer = this.map.getLayer('Details');
       if (detailsLayer && detailsLayer.tilemapLayer) {
-        this.physics.add.collider(sprite, detailsLayer.tilemapLayer, () => {
+        this.physics.add.collider(bulletSprite, detailsLayer.tilemapLayer, () => {
           // Supprimer la balle lorsqu'elle touche un détail
           this.room.send('removeBullet', { bulletId });
         });
@@ -760,8 +790,8 @@ export class GameScene extends Phaser.Scene {
 
       // Mise à jour de la position de la balle lorsqu'elle change
       bullet.onChange(() => {
-        sprite.setPosition(bullet.x, bullet.y);
-        sprite.setRotation(bullet.rotation);
+        bulletSprite.setPosition(bullet.x, bullet.y);
+        bulletSprite.setRotation(bullet.rotation);
       });
     });
 
@@ -1096,6 +1126,18 @@ export class GameScene extends Phaser.Scene {
     if (this.minimapBorder) {
       this.minimapBorder.setDepth(151);
     }
+
+    // Ajouter tous les éléments UI au conteneur uiLayer
+    this.uiLayer.add(infoBox);
+    this.uiLayer.add(timerBox);
+    this.uiLayer.add(this.healthBar);
+    this.uiLayer.add(this.healthText);
+    this.uiLayer.add(this.playersAliveText);
+    this.uiLayer.add(this.weaponText);
+    this.uiLayer.add(this.zoneTimerText);
+    this.uiLayer.add(this.ammoBackground);
+    this.uiLayer.add(this.ammoText);
+    this.uiLayer.add(this.reloadingText);
   }
 
   private resizeUI() {
@@ -1217,15 +1259,8 @@ export class GameScene extends Phaser.Scene {
       }
 
       // S'assurer que tous les éléments d'UI sont ignorés par la minimap
-      this.minimap.ignore(this.minimapBorder);
-      this.minimap.ignore(this.healthBar);
-      this.minimap.ignore(this.healthText);
-      this.minimap.ignore(this.playersAliveText);
-      this.minimap.ignore(this.weaponText);
-      this.minimap.ignore(this.zoneTimerText);
-      this.minimap.ignore(this.ammoBackground);
-      this.minimap.ignore(this.ammoText);
-      this.minimap.ignore(this.reloadingText);
+      this.minimap.ignore(this.uiLayer);
+      this.minimap.ignore(this.notificationLayer);
     }
   }
 
@@ -1979,6 +2014,9 @@ export class GameScene extends Phaser.Scene {
     notification.setScrollFactor(0);
     notification.setDepth(200);
     
+    // Ajouter la notification à la couche de notification
+    this.notificationLayer.add(notification);
+    
     // Animation de l'apparition et disparition
     this.tweens.add({
       targets: notification,
@@ -2000,5 +2038,26 @@ export class GameScene extends Phaser.Scene {
         });
       }
     });
+  }
+
+  // Mettre à jour la méthode de dessin des joueurs sur la minimap
+  private drawPlayersOnMinimap() {
+    if (!this.minimapPlayers || !this.currentPlayer) return;
+
+    // Effacer les dessins précédents
+    this.minimapPlayers.clear();
+    
+    // Dessiner tous les autres joueurs en bleu
+    this.players.forEach((playerSprite, sessionId) => {
+      if (sessionId !== this.room.sessionId && playerSprite.active) {
+        this.minimapPlayers.fillStyle(0x00ffff, 1); // Cyan pour les autres joueurs
+        this.minimapPlayers.fillCircle(playerSprite.x, playerSprite.y, 5);
+      }
+    });
+    
+    // Dessiner le joueur actuel en rouge
+    this.playerIndicator.clear();
+    this.playerIndicator.fillStyle(0xff0000, 1); // Rouge pour le joueur actuel
+    this.playerIndicator.fillCircle(this.currentPlayer.x, this.currentPlayer.y, 5);
   }
 } 

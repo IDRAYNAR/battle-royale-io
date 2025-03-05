@@ -63,6 +63,10 @@ export class GameScene extends Phaser.Scene {
   private keyS!: Phaser.Input.Keyboard.Key;
   private keyD!: Phaser.Input.Keyboard.Key;
   private keyR!: Phaser.Input.Keyboard.Key;
+  // Ajouter les touches pour le clavier AZERTY (ZQSD)
+  private keyZ!: Phaser.Input.Keyboard.Key;
+  private keyQ!: Phaser.Input.Keyboard.Key;
+  private isFrenchKeyboard: boolean = false;
 
   // Interface utilisateur
   private healthBar!: Phaser.GameObjects.Graphics;
@@ -346,6 +350,20 @@ export class GameScene extends Phaser.Scene {
     // Configurer les contrôles
     if (this.input && this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
+      
+      // Déterminer si on utilise un clavier AZERTY ou QWERTY
+      this.isFrenchKeyboard = this.detectFrenchKeyboard();
+      
+      // Configurer les touches en fonction du clavier
+      if (this.isFrenchKeyboard) {
+        console.log("Clavier français (AZERTY) détecté, utilisation des touches ZQSD");
+        this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
+        this.keyQ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+        this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
+        this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+      }
+      
+      // Toujours configurer les touches WASD pour la compatibilité
       this.keyW = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
       this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
       this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
@@ -1895,8 +1913,10 @@ export class GameScene extends Phaser.Scene {
     let vx = 0;
     let vy = 0;
 
-    // Gestion des touches ZQSD et des flèches
-    if ((this.keyW && this.keyW.isDown) || (this.cursors && this.cursors.up.isDown)) {
+    // Gestion des touches ZQSD/WASD et des flèches
+    if ((this.isFrenchKeyboard && this.keyZ && this.keyZ.isDown) || 
+        (this.keyW && this.keyW.isDown) || 
+        (this.cursors && this.cursors.up.isDown)) {
       vy = -speed;
     }
 
@@ -1904,7 +1924,9 @@ export class GameScene extends Phaser.Scene {
       vy = speed;
     }
 
-    if ((this.keyA && this.keyA.isDown) || (this.cursors && this.cursors.left.isDown)) {
+    if ((this.isFrenchKeyboard && this.keyQ && this.keyQ.isDown) || 
+        (this.keyA && this.keyA.isDown) || 
+        (this.cursors && this.cursors.left.isDown)) {
       vx = -speed;
     }
 
@@ -2240,5 +2262,31 @@ export class GameScene extends Phaser.Scene {
       this.gamepadInfoText.destroy();
       this.gamepadInfoText = null;
     }
+  }
+
+  /**
+   * Détecte si l'utilisateur a probablement un clavier français (AZERTY)
+   * basé sur la langue du navigateur et d'autres heuristiques
+   */
+  private detectFrenchKeyboard(): boolean {
+    // Vérifier si le localStorage contient une préférence
+    const savedPreference = localStorage.getItem('keyboardLayout');
+    
+    if (savedPreference) {
+      // Si l'utilisateur a choisi explicitement une disposition
+      if (savedPreference === 'azerty') {
+        return true;
+      } else if (savedPreference === 'qwerty') {
+        return false;
+      }
+      // Si savedPreference === 'auto', continuer avec la détection automatique
+    }
+    
+    // Vérifier la langue du navigateur pour la détection automatique
+    const userLanguage = navigator.language || (navigator as any).userLanguage || '';
+    const isFrenchLocale = userLanguage.toLowerCase().startsWith('fr');
+    
+    // Par défaut, utiliser la détection de langue
+    return isFrenchLocale;
   }
 } 

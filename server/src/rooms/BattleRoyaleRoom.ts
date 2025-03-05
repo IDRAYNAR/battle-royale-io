@@ -43,12 +43,12 @@ class BattleRoyaleState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Bullet }) bullets = new MapSchema<Bullet>();
   @type({ map: Weapon }) weapons = new MapSchema<Weapon>();
-  @type("number") mapWidth: number = 2000;
-  @type("number") mapHeight: number = 2000;
+  @type("number") mapWidth: number = 3968; // 62 tiles * 64 pixels
+  @type("number") mapHeight: number = 3968; // 62 tiles * 64 pixels
   @type("number") shrinkTimer: number = 30; // Réduit de 60 à 30 secondes
-  @type("number") safeZoneRadius: number = 1000; // Rayon de la zone sûre
-  @type("number") safeZoneX: number = 1000; // Position X du centre de la zone sûre
-  @type("number") safeZoneY: number = 1000; // Position Y du centre de la zone sûre
+  @type("number") safeZoneRadius: number = 1984; // Rayon initial de la zone sûre (moitié de la map)
+  @type("number") safeZoneX: number = 1984; // Position X du centre de la zone sûre (moitié de la map)
+  @type("number") safeZoneY: number = 1984; // Position Y du centre de la zone sûre (moitié de la map)
   @type("number") nextShrinkTime: number = 30; // Temps restant avant le prochain rétrécissement
 }
 
@@ -72,24 +72,46 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     this.onMessage("move", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.isAlive) {
-        // Mise à jour directe des coordonnées
-        player.x = data.x;
-        player.y = data.y;
-        player.rotation = data.rotation;
+        // Vérifier que les coordonnées sont des nombres valides
+        if (data.x !== undefined && !isNaN(data.x) && isFinite(data.x) &&
+            data.y !== undefined && !isNaN(data.y) && isFinite(data.y)) {
+          // Mise à jour directe des coordonnées
+          player.x = data.x;
+          player.y = data.y;
+        }
+        
+        // Vérifier que la rotation est un nombre valide
+        if (data.rotation !== undefined && !isNaN(data.rotation) && isFinite(data.rotation)) {
+          player.rotation = data.rotation;
+        }
       }
     });
 
     this.onMessage("rotate", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (player && player.isAlive) {
-        // Mise à jour de la rotation
-        player.rotation = data.rotation;
+        // Vérifier que la rotation est un nombre valide
+        if (data.rotation !== undefined && !isNaN(data.rotation) && isFinite(data.rotation)) {
+          // Mise à jour de la rotation
+          player.rotation = data.rotation;
+        }
       }
     });
 
     this.onMessage("shoot", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.isAlive) return;
+      
+      // Vérifier que la rotation est un nombre valide
+      if (data.rotation === undefined || isNaN(data.rotation) || !isFinite(data.rotation)) {
+        return; // Ne pas traiter le tir si la rotation n'est pas valide
+      }
+      
+      // Vérifier si le joueur a une arme
+      if (!player.weapon || player.weapon === "") {
+        console.log(`Joueur ${client.sessionId} a essayé de tirer sans arme`);
+        return;
+      }
       
       // Vérifier si le joueur est en train de recharger
       const currentTime = Date.now();
@@ -98,80 +120,77 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       }
       
       // Vérifier le délai entre les tirs
-      let shotDelay = 1000; // Délai par défaut
+      let shotDelay = 500; // Délai par défaut (500ms)
       if (player.weapon === "pistol") {
-        shotDelay = 1000;
+        shotDelay = 500; // 500ms entre chaque tir
       } else if (player.weapon === "rifle") {
-        shotDelay = 3000;
+        shotDelay = 200; // 200ms entre chaque tir
       } else if (player.weapon === "shotgun") {
-        shotDelay = 2000;
+        shotDelay = 1000; // 1000ms entre chaque tir
       }
       
       if (currentTime - player.lastShotTime < shotDelay) {
+        console.log(`Joueur ${client.sessionId} a essayé de tirer trop rapidement`);
         return; // Le joueur a tiré trop récemment
       }
-      
-      // Vérifier si le joueur a des munitions
-      if (player.ammo <= 0) {
-        // Démarrer le rechargement automatique
-        this.startReloading(player, client.sessionId);
-        return;
-      }
-      
-      // Mettre à jour le temps du dernier tir
-      player.lastShotTime = currentTime;
       
       // Déterminer le nombre de balles à tirer et les propriétés en fonction de l'arme
       let bulletsPerShot = 1;
       let damage = 10;
       let speed = 500;
       let spreadAngle = 0;
+      let ammoToConsume = 1; // Munitions à consommer par tir
       
       if (player.weapon === "pistol") {
         bulletsPerShot = 1;
         damage = 10;
         speed = 500;
+        ammoToConsume = 1;
       } else if (player.weapon === "rifle") {
-        bulletsPerShot = 5;
-        damage = 20;
-        speed = 700;
-        // Pour la mitraillette, on tire 5 balles à la suite avec un léger délai
-        this.fireRifleBurst(player, data.rotation, damage, speed, client.sessionId);
-        return;
+        bulletsPerShot = 3; // Rafale de 3 balles
+        damage = 15;
+        speed = 600;
+        ammoToConsume = 5; // Consomme 5 munitions par tir
       } else if (player.weapon === "shotgun") {
-        bulletsPerShot = 3;
-        damage = 30;
+        bulletsPerShot = 5; // 5 projectiles en éventail
+        damage = 8;
         speed = 400;
-        spreadAngle = 0.3; // Angle d'éventail pour le shotgun (en radians)
+        spreadAngle = Math.PI / 8; // 22.5 degrés
+        ammoToConsume = 5; // Consomme 5 munitions par tir pour le shotgun
       }
       
+      // Vérifier si le joueur a assez de munitions
+      if (player.ammo < ammoToConsume) {
+        // Plus de munitions, le joueur perd son arme
+        player.weapon = "";
+        player.ammo = 0;
+        
+        // Informer les clients que le joueur a perdu son arme
+        this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
+        this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
+        
+        console.log(`Joueur ${client.sessionId} n'a plus de munitions et a perdu son arme`);
+        return;
+      }
+      
+      // Mettre à jour le temps du dernier tir
+      player.lastShotTime = currentTime;
+      
       // Consommer les munitions
-      player.ammo -= bulletsPerShot;
-      if (player.ammo < 0) player.ammo = 0;
+      player.ammo -= ammoToConsume;
+      console.log(`Joueur ${client.sessionId} a tiré avec ${player.weapon}, munitions restantes: ${player.ammo}`);
       
       // Informer le client de la mise à jour des munitions
       this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
       
-      // Tirer les balles
-      if (player.weapon === "shotgun") {
-        // Pour le shotgun, on tire 3 balles en éventail
+      // Tirer en fonction du type d'arme
+      if (player.weapon === "rifle") {
+        this.fireRifleBurst(player, data.rotation, damage, speed, client.sessionId);
+      } else if (player.weapon === "shotgun") {
         this.fireShotgunSpread(player, data.rotation, damage, speed, spreadAngle, client.sessionId);
       } else {
-        // Pour le pistolet, on tire une seule balle
-        const bullet = new Bullet();
-        bullet.x = player.x;
-        bullet.y = player.y;
-        bullet.rotation = data.rotation;
-        bullet.ownerId = client.sessionId;
-        bullet.damage = damage;
-        bullet.speed = speed;
-        
-        this.state.bullets.set(this.generateId(), bullet);
-      }
-      
-      // Vérifier si le chargeur est vide et démarrer le rechargement automatique
-      if (player.ammo <= 0) {
-        this.startReloading(player, client.sessionId);
+        // Pistolet ou autre arme à tir unique
+        this.createBullet(player.x, player.y, data.rotation, damage, speed, client.sessionId);
       }
     });
 
@@ -186,43 +205,69 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           Math.pow(player.y - weapon.y, 2)
         );
         
-        // Si le joueur est assez proche de l'arme
-        if (distance < 50) {
+        // Vérifier si le joueur est assez proche de l'arme
+        if (distance <= 100) {
+          // Attribuer l'arme au joueur
           player.weapon = weapon.type;
           
           // Définir les munitions en fonction du type d'arme
           if (weapon.type === "pistol") {
             player.ammo = 9;
           } else if (weapon.type === "rifle") {
-            player.ammo = 20;
+            player.ammo = 30;
           } else if (weapon.type === "shotgun") {
-            player.ammo = 12;
+            player.ammo = 20; // 4 tirs de 5 balles chacun
           }
           
-          // Réinitialiser l'état de rechargement
-          player.isReloading = false;
-          
-          // Informer le client de la mise à jour des munitions
+          // Informer les clients que le joueur a ramassé une arme
+          this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: weapon.type });
           this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
           
           // Supprimer l'arme de la carte
           this.state.weapons.delete(data.weaponId);
           
-          // Programmer l'apparition d'une nouvelle arme après 2 secondes
-          setTimeout(() => {
-            this.generateSingleWeapon();
-          }, 2000);
+          console.log(`Joueur ${client.sessionId} a ramassé une arme ${weapon.type} avec ${player.ammo} munitions`);
         }
       }
+    });
+
+    this.onMessage("reload", (client, data) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.isAlive) return;
+      
+      // Le rechargement n'est plus possible, le joueur perd son arme
+      player.weapon = "";
+      player.ammo = 0;
+      
+      // Informer les clients que le joueur a perdu son arme
+      this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
+      this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
+      
+      console.log(`Joueur ${client.sessionId} a perdu son arme en essayant de recharger`);
+    });
+    
+    this.onMessage("dropWeapon", (client, data) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.isAlive) return;
+      
+      // Retirer l'arme du joueur
+      player.weapon = "";
+      player.ammo = 0;
+      
+      // Informer les clients que le joueur a lâché son arme
+      this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
+      this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
+      
+      console.log(`Joueur ${client.sessionId} a lâché son arme`);
     });
 
     // Génération des armes sur la carte
     this.generateWeapons(Math.max(10, this.minWeapons));
     
     // Initialisation de la zone
-    this.state.safeZoneRadius = 1000;
-    this.state.safeZoneX = 1000;
-    this.state.safeZoneY = 1000;
+    this.state.safeZoneRadius = 1984;
+    this.state.safeZoneX = 1984;
+    this.state.safeZoneY = 1984;
     this.state.shrinkTimer = 30;
     this.state.nextShrinkTime = 30;
     this.zoneActive = true;
@@ -487,42 +532,49 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   
   // Génération d'une seule arme
   private generateSingleWeapon() {
-    const weaponTypes = ["pistol", "rifle", "shotgun"];
     const weapon = new Weapon();
     
-    // Position aléatoire sur la carte
-    weapon.x = Math.floor(Math.random() * this.state.mapWidth);
-    weapon.y = Math.floor(Math.random() * this.state.mapHeight);
+    // Générer une position aléatoire sur la carte
+    const position = this.findSafeSpawnPosition();
+    weapon.x = position.x;
+    weapon.y = position.y;
     
-    // Type d'arme aléatoire
-    weapon.type = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+    // Déterminer le type d'arme aléatoirement
+    const weaponTypes = ["pistol", "rifle", "shotgun"];
+    const randomType = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+    weapon.type = randomType;
     
-    // Définition des propriétés de l'arme en fonction de son type
-    if (weapon.type === "pistol") {
+    // Définir les propriétés en fonction du type d'arme
+    if (randomType === "pistol") {
       weapon.damage = 10;
       weapon.fireRate = 1;
       weapon.ammoCapacity = 9;
-      weapon.reloadTime = 2000; // 2 secondes
-      weapon.shotDelay = 1000; // 1 seconde
+      weapon.reloadTime = 1500;
+      weapon.shotDelay = 500;
       weapon.bulletsPerShot = 1;
-    } else if (weapon.type === "rifle") {
-      weapon.damage = 20;
-      weapon.fireRate = 2;
-      weapon.ammoCapacity = 20;
-      weapon.reloadTime = 3000; // 3 secondes
-      weapon.shotDelay = 3000; // 3 secondes
-      weapon.bulletsPerShot = 5; // 5 balles à la suite
-    } else if (weapon.type === "shotgun") {
-      weapon.damage = 30;
+    } else if (randomType === "rifle") {
+      weapon.damage = 15;
+      weapon.fireRate = 3;
+      weapon.ammoCapacity = 30;
+      weapon.reloadTime = 2500;
+      weapon.shotDelay = 200;
+      weapon.bulletsPerShot = 3;
+    } else if (randomType === "shotgun") {
+      weapon.damage = 8;
       weapon.fireRate = 0.5;
-      weapon.ammoCapacity = 12;
-      weapon.reloadTime = 5000; // 5 secondes
-      weapon.shotDelay = 2000; // 2 secondes
-      weapon.bulletsPerShot = 3; // 3 balles en éventail
+      weapon.ammoCapacity = 20; // 4 tirs de 5 balles chacun
+      weapon.reloadTime = 3000;
+      weapon.shotDelay = 1000;
+      weapon.bulletsPerShot = 5;
     }
     
-    // Ajout de l'arme à l'état de la salle
-    this.state.weapons.set(this.generateId(), weapon);
+    // Générer un ID unique pour l'arme
+    const weaponId = this.generateId();
+    
+    // Ajouter l'arme à l'état du jeu
+    this.state.weapons.set(weaponId, weapon);
+    
+    return weaponId;
   }
   
   // Vérification du nombre d'armes sur la carte
@@ -585,98 +637,56 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     };
   }
 
-  // Méthode pour démarrer le rechargement
-  private startReloading(player: Player, playerId: string) {
-    if (player.isReloading) return;
-    
-    player.isReloading = true;
-    
-    // Déterminer le temps de rechargement en fonction de l'arme
-    let reloadTime = 2000; // Temps par défaut
-    if (player.weapon === "pistol") {
-      reloadTime = 2000;
-    } else if (player.weapon === "rifle") {
-      reloadTime = 3000;
-    } else if (player.weapon === "shotgun") {
-      reloadTime = 5000;
-    }
-    
-    // Définir le temps de fin du rechargement
-    player.reloadEndTime = Date.now() + reloadTime;
-    
-    // Informer le client du début du rechargement
-    this.broadcast("reloadStart", { playerId, reloadTime });
-    
-    // Programmer la fin du rechargement
-    setTimeout(() => {
-      if (player.isAlive) {
-        // Recharger les munitions en fonction de l'arme
-        if (player.weapon === "pistol") {
-          player.ammo = 9;
-        } else if (player.weapon === "rifle") {
-          player.ammo = 20;
-        } else if (player.weapon === "shotgun") {
-          player.ammo = 12;
-        }
-        
-        player.isReloading = false;
-        
-        // Informer le client de la fin du rechargement et de la mise à jour des munitions
-        this.broadcast("reloadEnd", { playerId });
-        this.broadcast("ammoUpdate", { playerId, ammo: player.ammo });
-      }
-    }, reloadTime);
-  }
-
   // Méthode pour tirer une rafale de balles avec la mitraillette
   private fireRifleBurst(player: Player, rotation: number, damage: number, speed: number, playerId: string) {
-    // Consommer les munitions
-    const bulletsToFire = Math.min(5, player.ammo);
-    player.ammo -= bulletsToFire;
+    // Nombre de balles dans la rafale
+    const burstCount = 3;
     
-    // Informer le client de la mise à jour des munitions
-    this.broadcast("ammoUpdate", { playerId, ammo: player.ammo });
+    // Intervalle entre les balles de la rafale (en millisecondes)
+    const burstInterval = 100;
     
-    // Tirer les balles avec un léger délai entre chaque
-    for (let i = 0; i < bulletsToFire; i++) {
+    // Tirer la première balle immédiatement
+    this.createBullet(player.x, player.y, rotation, damage, speed, playerId);
+    
+    // Tirer les balles restantes avec un délai
+    for (let i = 1; i < burstCount; i++) {
       setTimeout(() => {
+        // Vérifier si le joueur est toujours vivant
         if (player.isAlive) {
-          const bullet = new Bullet();
-          bullet.x = player.x;
-          bullet.y = player.y;
-          bullet.rotation = rotation;
-          bullet.ownerId = playerId;
-          bullet.damage = damage;
-          bullet.speed = speed;
-          
-          this.state.bullets.set(this.generateId(), bullet);
+          this.createBullet(player.x, player.y, rotation, damage, speed, playerId);
         }
-      }, i * 100); // 100ms entre chaque balle
-    }
-    
-    // Vérifier si le chargeur est vide et démarrer le rechargement automatique
-    if (player.ammo <= 0) {
-      setTimeout(() => {
-        if (player.isAlive) {
-          this.startReloading(player, playerId);
-        }
-      }, bulletsToFire * 100);
+      }, i * burstInterval);
     }
   }
 
-  // Méthode pour tirer des balles en éventail avec le shotgun
+  // Méthode pour tirer plusieurs balles en éventail avec le fusil à pompe
   private fireShotgunSpread(player: Player, rotation: number, damage: number, speed: number, spreadAngle: number, playerId: string) {
-    // Tirer 3 balles en éventail
-    for (let i = -1; i <= 1; i++) {
-      const bullet = new Bullet();
-      bullet.x = player.x;
-      bullet.y = player.y;
-      bullet.rotation = rotation + (i * spreadAngle);
-      bullet.ownerId = playerId;
-      bullet.damage = damage;
-      bullet.speed = speed;
-      
-      this.state.bullets.set(this.generateId(), bullet);
+    // Nombre de balles à tirer
+    const pelletCount = 5;
+    
+    // Calculer l'angle de départ (rotation - spreadAngle/2)
+    const startAngle = rotation - (spreadAngle / 2);
+    
+    // Calculer l'incrément d'angle entre chaque balle
+    const angleIncrement = spreadAngle / (pelletCount - 1);
+    
+    // Tirer les balles
+    for (let i = 0; i < pelletCount; i++) {
+      const angle = startAngle + (angleIncrement * i);
+      this.createBullet(player.x, player.y, angle, damage, speed, playerId);
     }
+  }
+
+  // Méthode pour créer une balle
+  private createBullet(x: number, y: number, rotation: number, damage: number, speed: number, ownerId: string) {
+    const bullet = new Bullet();
+    bullet.x = x;
+    bullet.y = y;
+    bullet.rotation = rotation;
+    bullet.ownerId = ownerId;
+    bullet.damage = damage;
+    bullet.speed = speed;
+    
+    this.state.bullets.set(this.generateId(), bullet);
   }
 } 

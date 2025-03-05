@@ -12,8 +12,13 @@ export class BootScene extends Phaser.Scene {
       this.createPlaceholderAsset(fileObj.key);
     });
 
+    // Chargement de la nouvelle map et des données de collision
+    this.load.image('mapImage', 'assets/MAP/BattleRoyale2D.png');
+    this.load.image('tilesheet', 'assets/MAP/tilesheet_complete.png');
+    this.load.tilemapTiledJSON('map', 'assets/MAP/BattleRoyale2D.tmj');
+
     // Chargement des assets du pack Kenney
-    this.load.image('background', 'assets/PNG/Tiles/tile_01.png'); // Utilisé comme tuile de fond
+    this.load.image('background', 'assets/PNG/Tiles/grass.png'); // Utilisé comme tuile de fond
     
     // Personnages
     this.load.image('player', 'assets/PNG/Characters/ManBlue/manBlue_gun.png');

@@ -12,8 +12,6 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create() {
-    console.log(`GameOverScene créée avec win=${this.win}`);
-    
     // Récupérer les dimensions de l'écran
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
@@ -176,8 +174,6 @@ export class GameOverScene extends Phaser.Scene {
   }
   
   resize(gameSize: { width: number; height: number }) {
-    console.log("Redimensionnement de GameOverScene");
-    
     // Récupération des nouvelles dimensions
     const width = gameSize.width;
     const height = gameSize.height;

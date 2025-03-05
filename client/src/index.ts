@@ -45,7 +45,6 @@ const serverUrl = window.location.hostname === 'localhost' || window.location.ho
 
 // Création du client Colyseus avec l'URL appropriée
 const client = new Colyseus.Client(serverUrl);
-console.log(`Connexion au serveur: ${serverUrl}`);
 
 // Exportation de l'instance du jeu pour y accéder depuis d'autres modules
 export default game; 

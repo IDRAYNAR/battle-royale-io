@@ -129,7 +129,7 @@ export class GameScene extends Phaser.Scene {
 
     // Initialisation du client Colyseus
     this.client = new Colyseus.Client(serverUrl);
-    console.log(`GameScene: Connexion au serveur: ${serverUrl}`);
+    
   }
 
   async create() {
@@ -138,7 +138,6 @@ export class GameScene extends Phaser.Scene {
       this.room = await this.client.joinOrCreate('battle_royale');
       this.setupRoom();
     } catch (error) {
-      console.error('Erreur de connexion à la salle:', error);
       this.add.text(400, 300, 'Erreur de connexion au serveur', {
         fontFamily: 'Arial',
         fontSize: '24px',
@@ -356,7 +355,7 @@ export class GameScene extends Phaser.Scene {
       
       // Configurer les touches en fonction du clavier
       if (this.isFrenchKeyboard) {
-        console.log("Clavier français (AZERTY) détecté, utilisation des touches ZQSD");
+        
         this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
         this.keyQ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
         this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
@@ -375,7 +374,7 @@ export class GameScene extends Phaser.Scene {
     if (this.input && this.input.gamepad) {
       // Activer le système de manettes
       this.input.gamepad.on('connected', (pad: Phaser.Input.Gamepad.Gamepad) => {
-        console.log('Manette connectée:', pad.id);
+        
         this.gamepad = pad;
         this.gamepadsEnabled = true;
         
@@ -384,7 +383,7 @@ export class GameScene extends Phaser.Scene {
       });
       
       this.input.gamepad.on('disconnected', (pad: Phaser.Input.Gamepad.Gamepad) => {
-        console.log('Manette déconnectée:', pad.id);
+        
         if (this.gamepad === pad) {
           this.gamepad = null;
         }
@@ -402,7 +401,7 @@ export class GameScene extends Phaser.Scene {
       if (this.input.gamepad.gamepads.length > 0) {
         this.gamepad = this.input.gamepad.gamepads[0];
         this.gamepadsEnabled = true;
-        console.log('Manette déjà connectée:', this.gamepad.id);
+        
         
         // Afficher les informations sur les contrôles de la manette
         this.showGamepadInfo(this.gamepad.id);
@@ -431,7 +430,7 @@ export class GameScene extends Phaser.Scene {
             this.isShooting = false;
           });
         } else {
-          console.log("Tir ignoré - déjà en train de tirer ou délai non écoulé");
+          
         }
       });
     }
@@ -578,7 +577,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de l'ajout du joueur actuel
     this.room.state.players.onAdd((player: Player, sessionId: string) => {
-      console.log(`Joueur ${sessionId} ajouté`);
+      
 
       // Création du sprite du joueur
       let sprite; // Utiliser let au lieu de const pour permettre la réaffectation
@@ -691,7 +690,7 @@ export class GameScene extends Phaser.Scene {
         // Mettre à jour l'affichage des munitions pour le joueur actuel
         this.currentAmmo = data.ammo;
         this.updateAmmoDisplay(this.currentAmmo);
-        console.log("Mise à jour des munitions depuis le serveur:", this.currentAmmo);
+        
       }
     });
     
@@ -704,7 +703,7 @@ export class GameScene extends Phaser.Scene {
         // Mettre à jour l'affichage des chargeurs pour le joueur actuel
         this.magazineCount = data.magazineCount;
         this.updateAmmoDisplay(this.currentAmmo);
-        console.log("Mise à jour des chargeurs depuis le serveur:", this.magazineCount);
+        
         
         // Si le joueur a récupéré un nouveau chargeur, afficher une notification
         if (this.magazineCount > previousMagazineCount) {
@@ -784,7 +783,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de la suppression des joueurs
     this.room.state.players.onRemove((player: Player, sessionId: string) => {
-      console.log(`Joueur ${sessionId} supprimé`);
+      
 
       const sprite = this.players.get(sessionId);
       if (sprite) {
@@ -798,7 +797,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de l'état des armes
     this.room.state.weapons.onAdd((weapon: Weapon, weaponId: string) => {
-      console.log(`Arme ${weaponId} ajoutée à la position ${weapon.x}, ${weapon.y}`);
+      
 
       // Création du sprite de l'arme
       const weaponSprite = this.physics.add.sprite(weapon.x, weapon.y, weapon.type);
@@ -832,7 +831,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de la suppression des armes
     this.room.state.weapons.onRemove((weapon: Weapon, weaponId: string) => {
-      console.log(`Arme ${weaponId} supprimée`);
+      
 
       const sprite = this.weapons.get(weaponId);
       if (sprite) {
@@ -889,7 +888,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion de la suppression des balles
     this.room.state.bullets.onRemove((bullet: Bullet, bulletId: string) => {
-      console.log(`Balle ${bulletId} supprimée`);
+      
 
       const sprite = this.bullets.get(bulletId);
       if (sprite) {
@@ -900,7 +899,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion des messages du serveur
     this.room.onMessage('playerEliminated', (message: { playerId: string, playersLeft: number }) => {
-      console.log(`Joueur éliminé: ${message.playerId}, Joueurs restants: ${message.playersLeft}`);
+      
 
       // Récupérer le sprite du joueur éliminé
       const playerSprite = this.players.get(message.playerId);
@@ -911,7 +910,7 @@ export class GameScene extends Phaser.Scene {
 
       // Si c'est le joueur actuel qui est éliminé
       if (message.playerId === this.room.sessionId) {
-        console.log("Vous avez été éliminé!");
+        
 
         // Passer en mode spectateur
         this.currentPlayer.setAlpha(0.5); // Effet fantôme
@@ -971,7 +970,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.room.onMessage('gameOver', (message: { winnerId: string }) => {
-      console.log(`Partie terminée, gagnant: ${message.winnerId}`);
+      
 
       // Arrêter les mises à jour de la scène
       this.scene.pause();
@@ -1016,7 +1015,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.room.onMessage("zoneShrink", (message: { x: number, y: number, radius: number, nextShrinkTime: number }) => {
-      console.log(`Message zoneShrink reçu:`, message);
+      
 
       // Mise à jour de la zone sûre
       this.updateSafeZone(message.x, message.y, message.radius);
@@ -1028,7 +1027,7 @@ export class GameScene extends Phaser.Scene {
 
     // Ajouter un gestionnaire pour le message zoneUpdate
     this.room.onMessage("zoneUpdate", (message: { x: number, y: number, radius: number, nextShrinkTime: number }) => {
-      console.log(`Message zoneUpdate reçu:`, message);
+      
 
       // Mise à jour de la zone sûre
       this.updateSafeZone(message.x, message.y, message.radius);
@@ -1046,7 +1045,7 @@ export class GameScene extends Phaser.Scene {
 
     // Gestion du message de rafraîchissement forcé
     this.room.onMessage('forceRefresh', () => {
-      console.log("Rafraîchissement forcé de la page");
+      
       // Forcer le rafraîchissement de la page
       window.location.reload();
     });
@@ -1417,7 +1416,7 @@ export class GameScene extends Phaser.Scene {
   private updateSafeZone(x: number, y: number, radius: number) {
     if (!this.safeZone) return;
 
-    console.log(`Mise à jour de la zone: x=${x}, y=${y}, radius=${radius}`);
+    
 
     // Vérifier que les valeurs sont valides
     if (isNaN(x) || isNaN(y) || isNaN(radius)) {
@@ -1690,20 +1689,20 @@ export class GameScene extends Phaser.Scene {
     // Mettre à jour l'affichage de l'arme
     this.updateWeaponDisplay(weaponType);
     
-    console.log(`Arme initialisée: ${weaponType}, Munitions: ${this.currentAmmo}/${this.maxAmmo}`);
+    
   }
 
   // Méthode pour gérer le clic de la souris
   private handleShootingOnClick() {
-    console.log("Traitement du tir");
+    
     
     // Vérifier si le joueur a une arme
     if (this.currentPlayer && this.room && this.currentWeapon && this.currentWeapon !== '') {
-      console.log("Le joueur a une arme:", this.currentWeapon);
+      
       
       // Vérifier si le joueur est en train de recharger
       if (this.reloadingText && this.reloadingText.visible) {
-        console.log("Impossible de tirer pendant le rechargement");
+        
         return;
       }
       
@@ -1711,7 +1710,7 @@ export class GameScene extends Phaser.Scene {
       this.lastFireTime = this.time.now;
       
       if (this.currentAmmo > 0) {
-        console.log("Tir avec munitions:", this.currentAmmo);
+        
         
         // Calculer le nombre de munitions à consommer en fonction de l'arme
         let ammoToConsume = 1;
@@ -1725,7 +1724,7 @@ export class GameScene extends Phaser.Scene {
         
         // Vérifier si le joueur a assez de munitions
         if (this.currentAmmo < ammoToConsume) {
-          console.log("Pas assez de munitions pour tirer");
+          
           
           // Essayer de recharger automatiquement
           if (this.magazineCount > 0) {
@@ -1745,19 +1744,19 @@ export class GameScene extends Phaser.Scene {
         
         // Envoyer le message de tir au serveur avec la rotation calculée
         this.room.send('shoot', { rotation: angle });
-        console.log("Tir envoyé au serveur avec rotation:", angle, "Munitions restantes:", this.currentAmmo);
+        
         
         // Si c'était la dernière munition, vérifier si le joueur a des chargeurs
         if (this.currentAmmo <= 0) {
-          console.log("Plus de munitions après le tir");
+          
           
           // Vérifier si le joueur a des chargeurs
           if (this.magazineCount > 0) {
-            console.log("Rechargement automatique avec un chargeur disponible");
+            
             // Recharger automatiquement
             this.reloadWeapon();
           } else {
-            console.log("Plus de munitions et pas de chargeurs, l'arme est perdue");
+            
             
             // Plus de munitions et pas de chargeurs, changer l'apparence du joueur et retirer l'arme
             if (this.currentPlayer) {
@@ -1785,15 +1784,15 @@ export class GameScene extends Phaser.Scene {
           }
         }
       } else {
-        console.log("Tentative de tir sans munitions");
+        
         
         // Vérifier si le joueur a des chargeurs
         if (this.magazineCount > 0) {
-          console.log("Rechargement automatique avec un chargeur disponible");
+          
           // Recharger automatiquement
           this.reloadWeapon();
         } else {
-          console.log("Plus de munitions et pas de chargeurs, l'arme est perdue");
+          
           
           // Plus de munitions et pas de chargeurs, changer l'apparence du joueur et retirer l'arme
           if (this.currentPlayer) {
@@ -1821,7 +1820,7 @@ export class GameScene extends Phaser.Scene {
         }
       }
     } else {
-      console.log("Le joueur n'a pas d'arme");
+      
     }
   }
   
@@ -1843,26 +1842,26 @@ export class GameScene extends Phaser.Scene {
   private reloadWeapon() {
     // Vérifier si le joueur a une arme
     if (!this.currentWeapon || this.currentWeapon === '') {
-      console.log("Aucune arme à recharger");
+      
       return;
     }
     
     // Vérifier si le joueur est déjà en train de recharger
     if (this.reloadingText && this.reloadingText.visible) {
-      console.log("Déjà en train de recharger");
+      
       return;
     }
     
     // Vérifier si le joueur a besoin de recharger
     if (this.currentAmmo === this.maxAmmo) {
-      console.log("Munitions déjà pleines");
+      
       return;
     }
 
     // Envoyer la demande de rechargement au serveur
     if (this.room) {
       this.room.send('reload', {});
-      console.log("Demande de rechargement envoyée");
+      
     }
   }
 
@@ -2074,14 +2073,14 @@ export class GameScene extends Phaser.Scene {
   private checkTileCollisionProperties() {
     if (!this.map || !this.groundLayer) return;
 
-    console.log("Vérification des propriétés de collision des tuiles...");
+    
 
     // Parcourir toutes les tuiles de la couche de sol
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
         const tile = this.groundLayer.getTileAt(x, y);
         if (tile && tile.properties && tile.properties.collides) {
-          console.log(`Tuile à (${x}, ${y}) a la propriété collides = ${tile.properties.collides}`);
+          
         }
       }
     }
@@ -2092,7 +2091,7 @@ export class GameScene extends Phaser.Scene {
         for (let x = 0; x < this.map.width; x++) {
           const tile = this.collisionLayer.getTileAt(x, y);
           if (tile && tile.properties && tile.properties.collides) {
-            console.log(`Objet à (${x}, ${y}) a la propriété collides = ${tile.properties.collides}`);
+            
           }
         }
       }

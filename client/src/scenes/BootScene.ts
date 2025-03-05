@@ -116,7 +116,6 @@ export class BootScene extends Phaser.Scene {
 
   // Création d'un asset placeholder en cas d'erreur de chargement
   private createPlaceholderAsset(key: string) {
-    console.log(`Création d'un asset placeholder pour: ${key}`);
     
     const graphics = this.make.graphics({ x: 0, y: 0 });
     

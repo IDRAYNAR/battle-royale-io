@@ -110,7 +110,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       
       // Vérifier si le joueur a une arme
       if (!player.weapon || player.weapon === "") {
-        console.log(`Joueur ${client.sessionId} a essayé de tirer sans arme`);
         return;
       }
       
@@ -131,7 +130,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       }
       
       if (currentTime - player.lastShotTime < shotDelay) {
-        console.log(`Joueur ${client.sessionId} a essayé de tirer trop rapidement`);
         return; // Le joueur a tiré trop récemment
       }
       
@@ -166,7 +164,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         if (player.magazineCount > 0) {
           // Essayer d'auto-recharger l'arme, pas besoin d'action côté serveur
           // Le client va demander un rechargement
-          console.log(`Joueur ${client.sessionId} doit recharger son arme`);
           return;
         } else {
           // Plus de munitions et pas de chargeurs, le joueur perd son arme
@@ -177,7 +174,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
           this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
           
-          console.log(`Joueur ${client.sessionId} n'a plus de munitions et pas de chargeurs, il a perdu son arme`);
           return;
         }
       }
@@ -187,7 +183,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       
       // Consommer les munitions
       player.ammo -= ammoToConsume;
-      console.log(`Joueur ${client.sessionId} a tiré avec ${player.weapon}, munitions restantes: ${player.ammo}`);
       
       // Informer le client de la mise à jour des munitions
       this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
@@ -226,7 +221,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
               magazineCount: player.magazineCount 
             });
             
-            console.log(`Joueur ${client.sessionId} a récupéré un chargeur pour son ${weapon.type}, total: ${player.magazineCount}`);
+            return;
           } else {
             // Attribuer l'arme au joueur
             player.weapon = weapon.type;
@@ -248,7 +243,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
             this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
             this.broadcast("magazineUpdate", { playerId: client.sessionId, magazineCount: player.magazineCount });
             
-            console.log(`Joueur ${client.sessionId} a ramassé une arme ${weapon.type} avec ${player.ammo} munitions`);
+            return;
           }
           
           // Supprimer l'arme de la carte
@@ -309,7 +304,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
             this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
             this.broadcast("magazineUpdate", { playerId: client.sessionId, magazineCount: player.magazineCount });
             
-            console.log(`Joueur ${client.sessionId} a rechargé son arme, total de munitions: ${player.ammo}, chargeurs restants: ${player.magazineCount}`);
+            return;
           }
         }, reloadTime);
       } else {
@@ -319,7 +314,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
           message: "Aucun chargeur disponible"
         });
         
-        console.log(`Joueur ${client.sessionId} n'a pas de chargeurs disponibles pour recharger`);
+        return;
       }
     });
     
@@ -335,7 +330,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
       this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
       
-      console.log(`Joueur ${client.sessionId} a lâché son arme`);
+      return;
     });
 
     // Génération des armes sur la carte
@@ -368,13 +363,9 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         this.shrinkZone();
       }
     }, 1000);
-    
-    console.log("Salle créée avec succès! Zone initialisée.");
   }
 
   onJoin(client: Client, options: any) {
-    console.log(`Client ${client.sessionId} a rejoint la salle`);
-    
     // Création d'un nouveau joueur
     const player = new Player();
     
@@ -405,8 +396,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   }
 
   onLeave(client: Client, consented: boolean) {
-    console.log(`${client.sessionId} a quitté la partie!`);
-    
     // Suppression du joueur de l'état de la salle
     this.state.players.delete(client.sessionId);
     
@@ -415,8 +404,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   }
 
   onDispose() {
-    console.log("Salle détruite!");
-    
     // Nettoyage des intervalles
     clearInterval(this.gameInterval);
     clearInterval(this.shrinkInterval);
@@ -586,8 +573,6 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       const newRadius = Math.max(200, currentRadius - this.shrinkSpeed);
       this.state.safeZoneRadius = newRadius;
       
-      console.log(`Zone rétrécie: ${this.state.safeZoneRadius}, position: ${this.state.safeZoneX},${this.state.safeZoneY}`);
-      
       // Notification aux clients
       this.broadcast("zoneUpdate", {
         x: this.state.safeZoneX,
@@ -702,14 +687,12 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       
       // Si la position est valide, la retourner
       if (isFarEnough) {
-        console.log(`Position de spawn trouvée: (${x}, ${y})`);
         return { x, y };
       }
     }
     
     // Si aucune position n'a été trouvée après le nombre maximum de tentatives,
     // générer une position aléatoire dans la zone sûre sans tenir compte des autres joueurs
-    console.log("Aucune position idéale trouvée, génération d'une position aléatoire dans la zone sûre");
     const angle = Math.random() * Math.PI * 2;
     const distance = Math.random() * (this.state.safeZoneRadius * 0.7);
     

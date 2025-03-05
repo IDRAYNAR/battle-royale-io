@@ -1145,7 +1145,7 @@ export class GameScene extends Phaser.Scene {
     this.weaponText.setDepth(150);
 
     // Texte pour le timer de la zone
-    this.zoneTimerText = this.add.text(timerBoxX + timerBoxWidth - padding - 6, timerBoxY + timerBoxHeight / 2, 'Zone: 30s', {
+    this.zoneTimerText = this.add.text(timerBoxX + timerBoxWidth - padding - 6, timerBoxY + timerBoxHeight / 2, 'Zone: 5s', {
       fontFamily: '"Segoe UI", Arial, sans-serif',
       fontSize: `${timerFontSize}px`,
       color: '#ffcc44',

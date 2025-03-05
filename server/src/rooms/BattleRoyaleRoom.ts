@@ -10,6 +10,7 @@ class Player extends Schema {
   @type("string") weapon: string = ""; // Commencer sans arme
   @type("boolean") isAlive: boolean = true;
   @type("number") ammo: number = 0; // Pas de munitions au début
+  @type("number") magazineCount: number = 0; // Nombre de chargeurs en réserve
   @type("number") lastShotTime: number = 0; // Temps du dernier tir
   @type("number") reloadEndTime: number = 0; // Temps de fin du rechargement
   @type("boolean") isReloading: boolean = false; // Indique si le joueur est en train de recharger
@@ -161,16 +162,24 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       
       // Vérifier si le joueur a assez de munitions
       if (player.ammo < ammoToConsume) {
-        // Plus de munitions, le joueur perd son arme
-        player.weapon = "";
-        player.ammo = 0;
-        
-        // Informer les clients que le joueur a perdu son arme
-        this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
-        this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
-        
-        console.log(`Joueur ${client.sessionId} n'a plus de munitions et a perdu son arme`);
-        return;
+        // Vérifier si le joueur a des chargeurs
+        if (player.magazineCount > 0) {
+          // Essayer d'auto-recharger l'arme, pas besoin d'action côté serveur
+          // Le client va demander un rechargement
+          console.log(`Joueur ${client.sessionId} doit recharger son arme`);
+          return;
+        } else {
+          // Plus de munitions et pas de chargeurs, le joueur perd son arme
+          player.weapon = "";
+          player.ammo = 0;
+          
+          // Informer les clients que le joueur a perdu son arme
+          this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
+          this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
+          
+          console.log(`Joueur ${client.sessionId} n'a plus de munitions et pas de chargeurs, il a perdu son arme`);
+          return;
+        }
       }
       
       // Mettre à jour le temps du dernier tir
@@ -207,43 +216,111 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         
         // Vérifier si le joueur est assez proche de l'arme
         if (distance <= 100) {
-          // Attribuer l'arme au joueur
-          player.weapon = weapon.type;
-          
-          // Définir les munitions en fonction du type d'arme
-          if (weapon.type === "pistol") {
-            player.ammo = 9;
-          } else if (weapon.type === "rifle") {
-            player.ammo = 30;
-          } else if (weapon.type === "shotgun") {
-            player.ammo = 20; // 4 tirs de 5 balles chacun
+          // Si le joueur a déjà la même arme, ajouter un chargeur
+          if (player.weapon === weapon.type) {
+            player.magazineCount += 1;
+            
+            // Informer les clients que le joueur a récupéré un chargeur
+            this.broadcast("magazineUpdate", { 
+              playerId: client.sessionId, 
+              magazineCount: player.magazineCount 
+            });
+            
+            console.log(`Joueur ${client.sessionId} a récupéré un chargeur pour son ${weapon.type}, total: ${player.magazineCount}`);
+          } else {
+            // Attribuer l'arme au joueur
+            player.weapon = weapon.type;
+            
+            // Définir les munitions en fonction du type d'arme
+            if (weapon.type === "pistol") {
+              player.ammo = 9;
+            } else if (weapon.type === "rifle") {
+              player.ammo = 30;
+            } else if (weapon.type === "shotgun") {
+              player.ammo = 20; // 4 tirs de 5 balles chacun
+            }
+            
+            // Réinitialiser le nombre de chargeurs
+            player.magazineCount = 0;
+            
+            // Informer les clients que le joueur a ramassé une arme
+            this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: weapon.type });
+            this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
+            this.broadcast("magazineUpdate", { playerId: client.sessionId, magazineCount: player.magazineCount });
+            
+            console.log(`Joueur ${client.sessionId} a ramassé une arme ${weapon.type} avec ${player.ammo} munitions`);
           }
-          
-          // Informer les clients que le joueur a ramassé une arme
-          this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: weapon.type });
-          this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
           
           // Supprimer l'arme de la carte
           this.state.weapons.delete(data.weaponId);
-          
-          console.log(`Joueur ${client.sessionId} a ramassé une arme ${weapon.type} avec ${player.ammo} munitions`);
         }
       }
     });
 
     this.onMessage("reload", (client, data) => {
       const player = this.state.players.get(client.sessionId);
-      if (!player || !player.isAlive) return;
+      if (!player || !player.isAlive || !player.weapon) return;
       
-      // Le rechargement n'est plus possible, le joueur perd son arme
-      player.weapon = "";
-      player.ammo = 0;
-      
-      // Informer les clients que le joueur a perdu son arme
-      this.broadcast("weaponUpdate", { playerId: client.sessionId, weapon: "" });
-      this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: 0 });
-      
-      console.log(`Joueur ${client.sessionId} a perdu son arme en essayant de recharger`);
+      // Vérifier si le joueur a au moins un chargeur
+      if (player.magazineCount > 0) {
+        // Définir le temps de rechargement en fonction de l'arme
+        let reloadTime = 2000; // 2 secondes par défaut
+        
+        if (player.weapon === "pistol") {
+          reloadTime = 1500; // 1.5 secondes pour le pistolet
+        } else if (player.weapon === "rifle") {
+          reloadTime = 2500; // 2.5 secondes pour le fusil d'assaut
+        } else if (player.weapon === "shotgun") {
+          reloadTime = 3000; // 3 secondes pour le fusil à pompe
+        }
+        
+        // Marquer le joueur comme étant en train de recharger
+        player.isReloading = true;
+        
+        // Définir la fin du rechargement
+        player.reloadEndTime = Date.now() + reloadTime;
+        
+        // Informer les clients que le joueur commence à recharger
+        this.broadcast("reloadStart", { 
+          playerId: client.sessionId,
+          reloadTime: reloadTime
+        });
+        
+        // Programmer la fin du rechargement
+        setTimeout(() => {
+          if (player && player.isAlive && player.isReloading) {
+            // Fin du rechargement, remplir les munitions
+            if (player.weapon === "pistol") {
+              player.ammo = 9;
+            } else if (player.weapon === "rifle") {
+              player.ammo = 30;
+            } else if (player.weapon === "shotgun") {
+              player.ammo = 20;
+            }
+            
+            // Décrémenter le nombre de chargeurs
+            player.magazineCount--;
+            
+            // Marquer le joueur comme n'étant plus en train de recharger
+            player.isReloading = false;
+            
+            // Informer les clients de la fin du rechargement
+            this.broadcast("reloadEnd", { playerId: client.sessionId });
+            this.broadcast("ammoUpdate", { playerId: client.sessionId, ammo: player.ammo });
+            this.broadcast("magazineUpdate", { playerId: client.sessionId, magazineCount: player.magazineCount });
+            
+            console.log(`Joueur ${client.sessionId} a rechargé son arme, total de munitions: ${player.ammo}, chargeurs restants: ${player.magazineCount}`);
+          }
+        }, reloadTime);
+      } else {
+        // Pas de chargeurs disponibles, envoyer un message
+        this.broadcast("reloadFail", { 
+          playerId: client.sessionId,
+          message: "Aucun chargeur disponible"
+        });
+        
+        console.log(`Joueur ${client.sessionId} n'a pas de chargeurs disponibles pour recharger`);
+      }
     });
     
     this.onMessage("dropWeapon", (client, data) => {

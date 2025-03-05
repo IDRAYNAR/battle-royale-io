@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 
 export class MenuScene extends Phaser.Scene {
+  private gradientBg: Phaser.GameObjects.Graphics | null = null;
+  private glowEffect: Phaser.GameObjects.Graphics | null = null;
+  private glowTween: Phaser.Tweens.Tween | null = null;
+
   constructor() {
     super({ key: 'MenuScene' });
   }
@@ -10,85 +14,116 @@ export class MenuScene extends Phaser.Scene {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     
-    // Création d'un fond avec des tuiles
-    const backgroundTile = this.textures.get('background');
-    const tileWidth = backgroundTile.getSourceImage().width;
-    const tileHeight = backgroundTile.getSourceImage().height;
+    // Création d'un fond avec dégradé moderne inspiré de NextJS
+    this.createModernBackground(width, height);
     
-    // Couvrir toute la zone visible avec des tuiles de fond
-    for (let x = 0; x < 2000; x += tileWidth) {
-      for (let y = 0; y < 2000; y += tileHeight) {
-        this.add.image(x, y, 'background').setOrigin(0, 0);
-      }
-    }
+    // Panneau principal avec bordure moderne
+    const panelWidth = Math.min(width * 0.85, 800);
+    const panelHeight = Math.min(height * 0.85, 700);
+    const panelX = width/2 - panelWidth/2;
+    const panelY = height/2 - panelHeight/2;
     
-    // Ajout d'un panneau semi-transparent pour le menu (centré et adapté à la taille de l'écran)
+    // Panneau principal avec effet glassmorphism
     const menuPanel = this.add.graphics();
-    menuPanel.fillStyle(0x000000, 0.7);
-    const panelWidth = Math.min(width * 0.8, 800);
-    const panelHeight = Math.min(height * 0.8, 600);
-    menuPanel.fillRoundedRect(width/2 - panelWidth/2, height/2 - panelHeight/2, panelWidth, panelHeight, 20);
+    // Fond semi-transparent
+    menuPanel.fillStyle(0x091114, 0.7);
+    menuPanel.fillRoundedRect(panelX, panelY, panelWidth, panelHeight, 24);
     
-    // Titre du jeu avec effet d'ombre
-    const titleSize = Math.min(48, width * 0.08);
-    const title = this.add.text(width/2, height * 0.15, 'BATTLE ROYALE 2D', {
-      fontFamily: 'Arial Black',
+    // Bordure subtile
+    menuPanel.lineStyle(2, 0xffffff, 0.1);
+    menuPanel.strokeRoundedRect(panelX, panelY, panelWidth, panelHeight, 24);
+    
+    // Titre avec typographie moderne
+    const titleSize = Math.min(64, width * 0.09);
+    const title = this.add.text(width/2, panelY + panelHeight * 0.2, 'BATTLE ROYALE 2D', {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${titleSize}px`,
       color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 6
+      fontStyle: 'bold',
+      shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 3, fill: true }
     }).setOrigin(0.5);
     
-    // Animation du titre
+    // Animation subtile du titre
     this.tweens.add({
       targets: title,
-      scale: { from: 0.9, to: 1.1 },
-      duration: 1500,
+      alpha: { from: 0.9, to: 1 },
+      duration: 2000,
       ease: 'Sine.easeInOut',
       yoyo: true,
       repeat: -1
     });
     
-    // Sous-titre
-    const subtitleSize = Math.min(24, width * 0.04);
-    this.add.text(width/2, height * 0.25, 'Le dernier survivant remporte la partie !', {
-      fontFamily: 'Arial',
+    // Sous-titre élégant
+    const subtitleSize = Math.min(24, width * 0.035);
+    this.add.text(width/2, panelY + panelHeight * 0.32, 'Le dernier survivant remporte la partie !', {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${subtitleSize}px`,
       color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 3
-    }).setOrigin(0.5);
+      fontStyle: 'normal'
+    }).setOrigin(0.5).setAlpha(0.8);
     
-    // Bouton de démarrage
-    const buttonScale = Math.min(1.5, width * 0.003);
-    const startButton = this.add.image(width/2, height * 0.4, 'button').setInteractive();
-    startButton.setScale(buttonScale, buttonScale * 0.67);
+    // Bouton de démarrage moderne avec effet de surbrillance
+    const buttonY = panelY + panelHeight * 0.48;
+    const buttonWidth = Math.min(250, panelWidth * 0.4);
+    const buttonHeight = Math.min(70, panelHeight * 0.09);
+    
+    // Fond du bouton avec effet glassmorphism
+    const playButton = this.add.graphics();
+    playButton.fillStyle(0x13674c, 0.8);
+    playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+    
+    // Bordure du bouton
+    playButton.lineStyle(1.5, 0x5effc3, 0.3);
+    playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+    
+    // Zone interactive pour le bouton
+    const buttonZone = this.add.zone(width/2, buttonY + buttonHeight/2, buttonWidth, buttonHeight).setInteractive();
     
     // Texte du bouton
-    const buttonTextSize = Math.min(32, width * 0.05);
-    const startText = this.add.text(width/2, height * 0.4, 'JOUER', {
-      fontFamily: 'Arial Black',
+    const buttonTextSize = Math.min(28, width * 0.04);
+    const playText = this.add.text(width/2, buttonY + buttonHeight/2, 'JOUER', {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${buttonTextSize}px`,
       color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 4
+      fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    // Effet de survol
-    startButton.on('pointerover', () => {
-      startButton.setTint(0xffff00);
-      startText.setScale(1.1);
+    // Effet de hover
+    buttonZone.on('pointerover', () => {
+      playButton.clear();
+      // Couleur du bouton en survol
+      playButton.fillStyle(0x1d936c, 0.9);
+      playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      playButton.lineStyle(2, 0x7dffd8, 0.5);
+      playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      
+      playText.setScale(1.03);
     });
     
-    startButton.on('pointerout', () => {
-      startButton.clearTint();
-      startText.setScale(1);
+    buttonZone.on('pointerout', () => {
+      playButton.clear();
+      // Retour à la couleur normale
+      playButton.fillStyle(0x13674c, 0.8);
+      playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      playButton.lineStyle(1.5, 0x5effc3, 0.3);
+      playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      
+      playText.setScale(1);
     });
     
-    // Démarrage du jeu au clic
-    startButton.on('pointerdown', () => {
+    // Effet de clic
+    buttonZone.on('pointerdown', () => {
+      // Animation de pression
+      playButton.clear();
+      playButton.fillStyle(0x0f4e3a, 1);
+      playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      playButton.lineStyle(1, 0x5effc3, 0.2);
+      playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      
+      playText.setY(buttonY + buttonHeight/2 + 2);
+      
       // Effet de flash
-      this.cameras.main.flash(500, 255, 255, 255);
+      this.cameras.main.flash(300, 255, 255, 255, true);
       
       // Son de clic (si disponible)
       if (this.sound.get('click')) {
@@ -101,71 +136,105 @@ export class MenuScene extends Phaser.Scene {
       });
     });
     
-    // Ajout d'un cadre pour les instructions
-    const instructionsPanel = this.add.graphics();
-    instructionsPanel.fillStyle(0x333333, 0.8);
-    const instrWidth = panelWidth * 0.8;
-    const instrHeight = panelHeight * 0.35;
+    // Panneau d'instructions avec design moderne
+    const instructionsY = panelY + panelHeight * 0.65;
+    const instrHeight = panelHeight * 0.28;
+    const instrWidth = panelWidth * 0.85;
     const instrX = width/2 - instrWidth/2;
-    const instrY = height * 0.55;
-    instructionsPanel.fillRoundedRect(instrX, instrY, instrWidth, instrHeight, 10);
-    instructionsPanel.lineStyle(2, 0xffffff, 1);
-    instructionsPanel.strokeRoundedRect(instrX, instrY, instrWidth, instrHeight, 10);
+    
+    // Création d'un conteneur pour les instructions avec effet glassmorphism
+    const instructionsPanel = this.add.graphics();
+    instructionsPanel.fillStyle(0xffffff, 0.05);
+    instructionsPanel.fillRoundedRect(instrX, instructionsY, instrWidth, instrHeight, 16);
+    instructionsPanel.lineStyle(1, 0xffffff, 0.1);
+    instructionsPanel.strokeRoundedRect(instrX, instructionsY, instrWidth, instrHeight, 16);
     
     // Titre des instructions
-    const instrTitleSize = Math.min(24, width * 0.04);
-    this.add.text(width/2, instrY + 20, 'Comment jouer :', {
-      fontFamily: 'Arial',
+    const instrTitleSize = Math.min(22, width * 0.032);
+    this.add.text(width/2, instructionsY + 20, 'Comment jouer :', {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${instrTitleSize}px`,
       color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 2
-    }).setOrigin(0.5);
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setAlpha(0.9);
     
-    // Instructions avec icônes
-    const instrTextSize = Math.min(18, width * 0.03);
-    const bulletSize = Math.min(4, width * 0.007);
-    const lineHeight = instrHeight / 6;
-    
+    // Instructions avec icônes modernes
     const instructions = [
-      { text: 'Utilisez les touches ZQSD pour vous déplacer' },
-      { text: 'Cliquez pour tirer' },
-      { text: 'Ramassez des armes pour augmenter votre puissance' },
-      { text: 'Restez dans la zone sûre pour survivre' }
+      { text: 'Utilisez les touches ZQSD pour vous déplacer', icon: '⌨️' },
+      { text: 'Cliquez pour tirer', icon: '🖱️' },
+      { text: 'Ramassez des armes pour augmenter votre puissance', icon: '🔫' },
+      { text: 'Restez dans la zone sûre pour survivre', icon: '🛡️' }
     ];
     
+    const instrTextSize = Math.min(16, width * 0.024);
+    const iconSize = Math.min(20, width * 0.03);
+    const lineHeight = instrHeight / 6;
+    
     instructions.forEach((instruction, index) => {
-      // Position Y de cette instruction
-      const y = instrY + 50 + (index * lineHeight);
+      const y = instructionsY + 60 + (index * lineHeight);
       
-      // Ajout d'un petit cercle comme puce
-      const bullet = this.add.graphics();
-      bullet.fillStyle(0xffff00, 1);
-      bullet.fillCircle(instrX + 20, y, bulletSize);
+      // Icône
+      this.add.text(instrX + 25, y, instruction.icon, {
+        fontSize: `${iconSize}px`
+      }).setOrigin(0.5);
       
-      // Texte de l'instruction
-      this.add.text(instrX + 30, y, instruction.text, {
-        fontFamily: 'Arial',
+      // Texte
+      this.add.text(instrX + 50, y, instruction.text, {
+        fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
         fontSize: `${instrTextSize}px`,
         color: '#ffffff'
-      }).setOrigin(0, 0.5);
-    });
-    
-    // Ajout d'une prévisualisation des personnages
-    const playerScale = Math.min(2, width * 0.004);
-    const player = this.add.image(width * 0.8, height * 0.4, 'player');
-    player.setScale(playerScale);
-    
-    // Animation de rotation du personnage
-    this.tweens.add({
-      targets: player,
-      angle: 360,
-      duration: 5000,
-      repeat: -1
+      }).setOrigin(0, 0.5).setAlpha(0.85);
     });
     
     // Ajout d'un écouteur pour le redimensionnement
     this.scale.on('resize', this.resize, this);
+  }
+  
+  // Création d'un fond avec dégradé moderne inspiré de NextJS
+  private createModernBackground(width: number, height: number) {
+    // Nettoyer les graphiques existants
+    if (this.gradientBg) {
+      this.gradientBg.destroy();
+    }
+    
+    if (this.glowEffect) {
+      this.glowEffect.destroy();
+    }
+    
+    // Fond de base
+    this.gradientBg = this.add.graphics();
+    this.gradientBg.fillStyle(0x0a1b1a, 1);
+    this.gradientBg.fillRect(0, 0, width, height);
+    
+    // Effet de lueur 1 - cercle rose/violet
+    const glow1 = this.add.graphics();
+    glow1.fillStyle(0xd946ef, 0.2); // Rose/violet
+    glow1.fillCircle(width * 0.8, height * 0.2, Math.min(width, height) * 0.4);
+    glow1.fillStyle(0x6366f1, 0.15); // Indigo
+    glow1.fillCircle(width * 0.2, height * 0.7, Math.min(width, height) * 0.3);
+    
+    // Simuler un effet de flou avec une opacité réduite
+    glow1.alpha = 0.5;
+    
+    // Effet de lueur animée (forme qui bouge lentement)
+    this.glowEffect = this.add.graphics();
+    this.glowEffect.fillStyle(0x10b981, 0.1); // Vert menthe
+    this.glowEffect.fillCircle(width * 0.5, height * 0.5, 200);
+    
+    // Animation subtile de l'effet de lueur
+    this.glowTween = this.tweens.add({
+      targets: this.glowEffect,
+      x: { from: -100, to: 100 },
+      y: { from: -50, to: 50 },
+      duration: 15000,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+  }
+  
+  update() {
+    // Aucune animation spécifique requise dans cette version épurée
   }
   
   resize(gameSize: { width: number; height: number }) {
@@ -175,6 +244,9 @@ export class MenuScene extends Phaser.Scene {
     
     // Mise à jour de la caméra
     this.cameras.main.setSize(width, height);
+    
+    // Recréer le fond pour s'adapter à la nouvelle taille
+    this.createModernBackground(width, height);
     
     // Recréer la scène pour adapter tous les éléments
     this.scene.restart();

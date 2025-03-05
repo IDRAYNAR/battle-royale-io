@@ -251,25 +251,46 @@ export class GameScene extends Phaser.Scene {
     this.createUI();
 
     // Création de la minimap (après l'UI pour pouvoir ignorer les éléments d'UI)
-    const minimapSize = Math.min(this.cameras.main.width, this.cameras.main.height) * 0.22; // Augmentation de la taille
-    const minimapPadding = 15;
+    const minimapSize = Math.min(this.cameras.main.width, this.cameras.main.height) * 0.30; // Augmentation de la taille à 30%
+    const minimapPadding = 16;
+    const borderWidth = 5; // Bordure plus épaisse pour être bien visible
 
-    // Créer le contour de la minimap
-    this.minimapBorder = this.add.graphics();
-    this.minimapBorder.lineStyle(3, 0xFFFFFF, 1);
-    this.minimapBorder.strokeRect(minimapPadding, minimapPadding, minimapSize, minimapSize);
-    this.minimapBorder.setScrollFactor(0);
-    this.minimapBorder.setDepth(101); // Au-dessus de la minimap
-
-    // Créer la minimap elle-même
+    // Créer d'abord un rectangle container pour la bordure (qui sera visible sous la minimap)
+    // Ce rectangle agira comme un fond avec bordure pour la minimap
+    const minimapContainer = this.add.graphics();
+    minimapContainer.setScrollFactor(0);
+    
+    // Dessiner un fond noir semi-transparent pour tout le conteneur 
+    minimapContainer.fillStyle(0x000000, 0.6);
+    minimapContainer.fillRect(
+        minimapPadding - borderWidth, 
+        minimapPadding - borderWidth, 
+        minimapSize + (borderWidth * 2), 
+        minimapSize + (borderWidth * 2)
+    );
+    
+    // Ajouter une bordure blanche brillante
+    minimapContainer.lineStyle(2, 0xffffff, 0.8);
+    minimapContainer.strokeRect(
+        minimapPadding - borderWidth + 1, 
+        minimapPadding - borderWidth + 1, 
+        minimapSize + (borderWidth * 2) - 2, 
+        minimapSize + (borderWidth * 2) - 2
+    );
+    
+    // Cette bordure est visible dans l'interface mais ne fait pas partie de la minimap
+    this.minimapBorder = minimapContainer;
+    this.minimapBorder.setDepth(90); // Sous la minimap
+    
+    // Créer ensuite la minimap elle-même
     this.minimap = this.cameras.add(minimapPadding, minimapPadding, minimapSize, minimapSize);
-    this.minimap.setZoom(0.3); // Zoom beaucoup plus élevé pour ne montrer qu'une petite partie de la carte
+    this.minimap.setZoom(0.3);
     this.minimap.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
     this.minimap.setBackgroundColor(0x002244);
     this.minimap.setName('minimap');
     this.minimap.setRoundPixels(true);
 
-    // Ignorer les éléments d'UI dans la minimap
+    // Ignorer tous les éléments d'UI dans la minimap (y compris la bordure)
     this.minimap.ignore(this.healthBar);
     this.minimap.ignore(this.healthText);
     this.minimap.ignore(this.playersAliveText);
@@ -550,6 +571,48 @@ export class GameScene extends Phaser.Scene {
         this.currentAmmo = data.ammo;
         this.updateAmmoDisplay(this.currentAmmo);
         console.log("Mise à jour des munitions depuis le serveur:", this.currentAmmo);
+      }
+    });
+    
+    // Écouter les mises à jour de chargeurs
+    this.room.onMessage("magazineUpdate", (data) => {
+      if (data.playerId === this.room.sessionId) {
+        // Vérifier s'il s'agit d'une augmentation du nombre de chargeurs
+        const previousMagazineCount = this.magazineCount;
+        
+        // Mettre à jour l'affichage des chargeurs pour le joueur actuel
+        this.magazineCount = data.magazineCount;
+        this.updateAmmoDisplay(this.currentAmmo);
+        console.log("Mise à jour des chargeurs depuis le serveur:", this.magazineCount);
+        
+        // Si le joueur a récupéré un nouveau chargeur, afficher une notification
+        if (this.magazineCount > previousMagazineCount) {
+          this.showMagazinePickupNotification();
+        }
+      }
+    });
+    
+    // Écouter les échecs de rechargement
+    this.room.onMessage("reloadFail", (data) => {
+      if (data.playerId === this.room.sessionId) {
+        // Afficher un message d'échec de rechargement temporaire
+        if (this.reloadingText) {
+          this.reloadingText.setText("PAS DE CHARGEUR!");
+          this.reloadingText.setColor('#ff0000');
+          this.reloadingText.setVisible(true);
+          
+          // Animation de clignotement pour l'échec
+          this.tweens.add({
+            targets: this.reloadingText,
+            alpha: { from: 1, to: 0.5 },
+            duration: 300,
+            yoyo: true,
+            repeat: 3,
+            onComplete: () => {
+              this.hideReloadingMessage();
+            }
+          });
+        }
       }
     });
     
@@ -875,40 +938,46 @@ export class GameScene extends Phaser.Scene {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
 
-    // Dimensions des boîtes d'information (plus petite)
-    const infoBoxWidth = Math.min(200, width * 0.2);
-    const infoBoxHeight = Math.min(100, height * 0.15);
-    const infoBoxX = 10;
-    const infoBoxY = height - infoBoxHeight - 60; // Remonter davantage
+    // Dimensions des boîtes d'information
+    const infoBoxWidth = Math.min(220, width * 0.22);
+    const infoBoxHeight = Math.min(120, height * 0.16);
+    const infoBoxX = 16;
+    const infoBoxY = height - infoBoxHeight - 70;
 
     // Dimensions de la boîte de timer
     const timerBoxWidth = Math.min(200, width * 0.2);
-    const timerBoxHeight = Math.min(50, height * 0.07);
-    const timerBoxX = width - timerBoxWidth - 10;
-    const timerBoxY = 10;
+    const timerBoxHeight = Math.min(60, height * 0.08);
+    const timerBoxX = width - timerBoxWidth - 16;
+    const timerBoxY = 16;
 
     // Taille de la police
-    const fontSize = Math.max(12, Math.min(16, width * 0.015));
-    const timerFontSize = Math.max(20, Math.min(32, width * 0.025));
+    const fontSize = Math.max(13, Math.min(18, width * 0.016));
+    const timerFontSize = Math.max(24, Math.min(36, width * 0.028));
 
     // Espacement
-    const padding = 10;
+    const padding = 14;
 
-    // Création de la boîte d'information
+    // Création de la boîte d'information avec effet glassmorphism
     const infoBox = this.add.graphics();
-    infoBox.fillStyle(0x000000, 0.7);
-    infoBox.lineStyle(2, 0xffffff, 1);
-    infoBox.fillRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 10);
-    infoBox.strokeRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 10);
+    infoBox.fillStyle(0x000000, 0.5); // Plus transparent
+    infoBox.fillRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 16);
+    infoBox.lineStyle(2, 0xffffff, 0.2); // Bordure plus subtile
+    infoBox.strokeRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 16);
+    // Ajout d'une bordure colorée plus vive sur le côté
+    infoBox.lineStyle(4, 0x44ff88, 0.7);
+    infoBox.strokeRoundedRect(infoBoxX, infoBoxY, 6, infoBoxHeight, { tl: 16, bl: 16, tr: 0, br: 0 });
     infoBox.setScrollFactor(0);
     infoBox.setDepth(100);
 
     // Création de la boîte de timer
     const timerBox = this.add.graphics();
-    timerBox.fillStyle(0x000000, 0.7);
-    timerBox.lineStyle(2, 0xffffff, 1);
-    timerBox.fillRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 10);
-    timerBox.strokeRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 10);
+    timerBox.fillStyle(0x000000, 0.5); // Plus transparent
+    timerBox.fillRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 16);
+    timerBox.lineStyle(2, 0xffffff, 0.2); // Bordure plus subtile
+    timerBox.strokeRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 16);
+    // Ajout d'une bordure colorée plus vive sur le côté
+    timerBox.lineStyle(4, 0xff8844, 0.7);
+    timerBox.strokeRoundedRect(timerBoxX + timerBoxWidth - 6, timerBoxY, 6, timerBoxHeight, { tl: 0, bl: 0, tr: 16, br: 16 });
     timerBox.setScrollFactor(0);
     timerBox.setDepth(100);
 
@@ -917,46 +986,50 @@ export class GameScene extends Phaser.Scene {
     this.healthBar.setScrollFactor(0);
     this.healthBar.setDepth(150);
 
-    // Texte pour la vie
-    this.healthText = this.add.text(infoBoxX + padding, infoBoxY + padding, 'Vie: 100', {
-      fontFamily: 'Arial',
+    // Texte pour la vie avec police moderne
+    this.healthText = this.add.text(infoBoxX + padding + 6, infoBoxY + padding, 'Vie: 100', {
+      fontFamily: '"Segoe UI", Arial, sans-serif',
       fontSize: `${fontSize}px`,
       color: '#ffffff',
+      fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 4
+      strokeThickness: 3
     });
     this.healthText.setScrollFactor(0);
     this.healthText.setDepth(150);
 
     // Texte pour le nombre de joueurs restants
-    this.playersAliveText = this.add.text(infoBoxX + padding, infoBoxY + padding + fontSize + 5, 'Joueurs: 0', {
-      fontFamily: 'Arial',
+    this.playersAliveText = this.add.text(infoBoxX + padding + 6, infoBoxY + padding + fontSize + 10, 'Joueurs: 0', {
+      fontFamily: '"Segoe UI", Arial, sans-serif',
       fontSize: `${fontSize}px`,
       color: '#ffffff',
+      fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 4
+      strokeThickness: 3
     });
     this.playersAliveText.setScrollFactor(0);
     this.playersAliveText.setDepth(150);
 
     // Texte pour l'arme équipée
-    this.weaponText = this.add.text(infoBoxX + padding, infoBoxY + padding + (fontSize * 2) + 10, 'Arme: Aucune', {
-      fontFamily: 'Arial',
+    this.weaponText = this.add.text(infoBoxX + padding + 6, infoBoxY + padding + (fontSize * 2) + 20, 'Arme: Aucune', {
+      fontFamily: '"Segoe UI", Arial, sans-serif',
       fontSize: `${fontSize}px`,
       color: '#ffffff',
+      fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 4
+      strokeThickness: 3
     });
     this.weaponText.setScrollFactor(0);
     this.weaponText.setDepth(150);
 
     // Texte pour le timer de la zone
-    this.zoneTimerText = this.add.text(timerBoxX + timerBoxWidth - padding, timerBoxY + timerBoxHeight / 2, 'Zone: 30s', {
-      fontFamily: 'Arial',
+    this.zoneTimerText = this.add.text(timerBoxX + timerBoxWidth - padding - 6, timerBoxY + timerBoxHeight / 2, 'Zone: 30s', {
+      fontFamily: '"Segoe UI", Arial, sans-serif',
       fontSize: `${timerFontSize}px`,
-      color: '#ffff00',
+      color: '#ffcc44',
+      fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 4
+      strokeThickness: 3
     });
     this.zoneTimerText.setOrigin(1, 0.5);
     this.zoneTimerText.setScrollFactor(0);
@@ -964,20 +1037,24 @@ export class GameScene extends Phaser.Scene {
 
     // Création du fond pour les munitions
     this.ammoBackground = this.add.graphics();
-    this.ammoBackground.fillStyle(0x000000, 0.7);
-    this.ammoBackground.lineStyle(2, 0xffffff, 1);
-    this.ammoBackground.fillRoundedRect(width - 200, height - 70, 190, 40, 10);
-    this.ammoBackground.strokeRoundedRect(width - 200, height - 70, 190, 40, 10);
+    this.ammoBackground.fillStyle(0x000000, 0.5);
+    this.ammoBackground.fillRoundedRect(width - 230, height - 86, 214, 56, 16);
+    this.ammoBackground.lineStyle(2, 0xffffff, 0.2);
+    this.ammoBackground.strokeRoundedRect(width - 230, height - 86, 214, 56, 16);
+    // Ajout d'une bordure colorée plus vive pour les munitions
+    this.ammoBackground.lineStyle(4, 0x44aaff, 0.7);
+    this.ammoBackground.strokeRoundedRect(width - 230, height - 86, 214, 6, { tl: 16, tr: 16, bl: 0, br: 0 });
     this.ammoBackground.setScrollFactor(0);
     this.ammoBackground.setDepth(150);
 
     // Création du texte pour les munitions
-    this.ammoText = this.add.text(width - 105, height - 50, "Pas d'arme", {
-      fontFamily: 'Arial',
-      fontSize: '18px',
+    this.ammoText = this.add.text(width - 123, height - 58, "Pas d'arme", {
+      fontFamily: '"Segoe UI", Arial, sans-serif',
+      fontSize: '24px',
       color: '#ffffff',
+      fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 4
+      strokeThickness: 3
     });
     this.ammoText.setOrigin(0.5);
     this.ammoText.setScrollFactor(0);
@@ -985,11 +1062,12 @@ export class GameScene extends Phaser.Scene {
 
     // Création du texte pour le rechargement
     this.reloadingText = this.add.text(width / 2, height - 100, 'RECHARGEMENT...', {
-      fontFamily: 'Arial',
+      fontFamily: '"Segoe UI", Arial, sans-serif',
       fontSize: '24px',
-      color: '#ffff00',
+      color: '#ffcc44',
+      fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 4
+      strokeThickness: 3
     });
     this.reloadingText.setOrigin(0.5);
     this.reloadingText.setScrollFactor(0);
@@ -1030,65 +1108,74 @@ export class GameScene extends Phaser.Scene {
     const height = this.cameras.main.height;
 
     // Recalculer les dimensions des boîtes d'information
-    const infoBoxWidth = Math.min(200, width * 0.2);
-    const infoBoxHeight = Math.min(100, height * 0.15);
-    const infoBoxX = 10;
-    const infoBoxY = height - infoBoxHeight - 60;
+    const infoBoxWidth = Math.min(220, width * 0.22);
+    const infoBoxHeight = Math.min(120, height * 0.16);
+    const infoBoxX = 16;
+    const infoBoxY = height - infoBoxHeight - 70;
 
     // Recalculer les dimensions de la boîte de timer
     const timerBoxWidth = Math.min(200, width * 0.2);
-    const timerBoxHeight = Math.min(50, height * 0.07);
-    const timerBoxX = width - timerBoxWidth - 10;
-    const timerBoxY = 10;
+    const timerBoxHeight = Math.min(60, height * 0.08);
+    const timerBoxX = width - timerBoxWidth - 16;
+    const timerBoxY = 16;
 
     // Taille de la police
-    const fontSize = Math.max(12, Math.min(16, width * 0.015));
-    const timerFontSize = Math.max(20, Math.min(32, width * 0.025));
+    const fontSize = Math.max(13, Math.min(18, width * 0.016));
+    const timerFontSize = Math.max(24, Math.min(36, width * 0.028));
 
     // Espacement
-    const padding = 10;
+    const padding = 14;
 
     // Redessiner la boîte d'information
     const infoBox = this.add.graphics();
-    infoBox.fillStyle(0x000000, 0.7);
-    infoBox.lineStyle(2, 0xffffff, 1);
-    infoBox.fillRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 10);
-    infoBox.strokeRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 10);
+    infoBox.fillStyle(0x000000, 0.5);
+    infoBox.fillRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 16);
+    infoBox.lineStyle(2, 0xffffff, 0.2);
+    infoBox.strokeRoundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 16);
+    // Ajout d'une bordure colorée plus vive sur le côté
+    infoBox.lineStyle(4, 0x44ff88, 0.7);
+    infoBox.strokeRoundedRect(infoBoxX, infoBoxY, 6, infoBoxHeight, { tl: 16, bl: 16, tr: 0, br: 0 });
     infoBox.setScrollFactor(0);
     infoBox.setDepth(100);
 
     // Redessiner la boîte de timer
     const timerBox = this.add.graphics();
-    timerBox.fillStyle(0x000000, 0.7);
-    timerBox.lineStyle(2, 0xffffff, 1);
-    timerBox.fillRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 10);
-    timerBox.strokeRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 10);
+    timerBox.fillStyle(0x000000, 0.5);
+    timerBox.fillRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 16);
+    timerBox.lineStyle(2, 0xffffff, 0.2);
+    timerBox.strokeRoundedRect(timerBoxX, timerBoxY, timerBoxWidth, timerBoxHeight, 16);
+    // Ajout d'une bordure colorée plus vive sur le côté
+    timerBox.lineStyle(4, 0xff8844, 0.7);
+    timerBox.strokeRoundedRect(timerBoxX + timerBoxWidth - 6, timerBoxY, 6, timerBoxHeight, { tl: 0, bl: 0, tr: 16, br: 16 });
     timerBox.setScrollFactor(0);
     timerBox.setDepth(100);
 
     // Redessiner le fond pour les munitions
-    this.ammoBackground.fillStyle(0x000000, 0.7);
-    this.ammoBackground.lineStyle(2, 0xffffff, 1);
-    this.ammoBackground.fillRoundedRect(width - 200, height - 70, 190, 40, 10);
-    this.ammoBackground.strokeRoundedRect(width - 200, height - 70, 190, 40, 10);
+    this.ammoBackground.fillStyle(0x000000, 0.5);
+    this.ammoBackground.fillRoundedRect(width - 230, height - 86, 214, 56, 16);
+    this.ammoBackground.lineStyle(2, 0xffffff, 0.2);
+    this.ammoBackground.strokeRoundedRect(width - 230, height - 86, 214, 56, 16);
+    // Ajout d'une bordure colorée plus vive pour les munitions
+    this.ammoBackground.lineStyle(4, 0x44aaff, 0.7);
+    this.ammoBackground.strokeRoundedRect(width - 230, height - 86, 214, 6, { tl: 16, tr: 16, bl: 0, br: 0 });
     this.ammoBackground.setScrollFactor(0);
     this.ammoBackground.setDepth(150);
 
     // Repositionner les textes et mettre à jour les tailles de police
-    this.healthText.setPosition(infoBoxX + padding, infoBoxY + padding);
+    this.healthText.setPosition(infoBoxX + padding + 6, infoBoxY + padding);
     this.healthText.setFontSize(fontSize);
     
-    this.playersAliveText.setPosition(infoBoxX + padding, infoBoxY + padding + fontSize + 5);
+    this.playersAliveText.setPosition(infoBoxX + padding + 6, infoBoxY + padding + fontSize + 10);
     this.playersAliveText.setFontSize(fontSize);
     
-    this.weaponText.setPosition(infoBoxX + padding, infoBoxY + padding + (fontSize * 2) + 10);
+    this.weaponText.setPosition(infoBoxX + padding + 6, infoBoxY + padding + (fontSize * 2) + 20);
     this.weaponText.setFontSize(fontSize);
     
-    this.zoneTimerText.setPosition(timerBoxX + timerBoxWidth - padding, timerBoxY + timerBoxHeight / 2);
+    this.zoneTimerText.setPosition(timerBoxX + timerBoxWidth - padding - 6, timerBoxY + timerBoxHeight / 2);
     this.zoneTimerText.setFontSize(timerFontSize);
     this.zoneTimerText.setOrigin(1, 0.5);
     
-    this.ammoText.setPosition(width - 105, height - 50);
+    this.ammoText.setPosition(width - 123, height - 58);
     this.reloadingText.setPosition(width / 2, height - 100);
 
     // Mettre à jour la barre de vie
@@ -1096,22 +1183,49 @@ export class GameScene extends Phaser.Scene {
     
     // Redimensionner et repositionner la minimap
     if (this.minimap) {
-      const minimapSize = Math.min(width, height) * 0.22;
-      const minimapPadding = 15;
+      // Augmenter la taille de la minimap pour une meilleure visibilité
+      const minimapSize = Math.min(width, height) * 0.30; // Augmenté de 0.25 à 0.30
+      const minimapPadding = 16;
+      const borderWidth = 5; // Bordure plus épaisse
 
       // Mettre à jour la minimap
       this.minimap.setSize(minimapSize, minimapSize);
       this.minimap.setPosition(minimapPadding, minimapPadding);
 
-      // Mettre à jour le contour de la minimap
+      // Mettre à jour le conteneur/bordure de la minimap
       if (this.minimapBorder) {
         this.minimapBorder.clear();
-        this.minimapBorder.lineStyle(3, 0xFFFFFF, 1);
-        this.minimapBorder.strokeRect(minimapPadding, minimapPadding, minimapSize, minimapSize);
+        this.minimapBorder.setDepth(90); // S'assurer qu'il reste sous la minimap
+        
+        // Redessiner le fond du conteneur
+        this.minimapBorder.fillStyle(0x000000, 0.6);
+        this.minimapBorder.fillRect(
+            minimapPadding - borderWidth, 
+            minimapPadding - borderWidth, 
+            minimapSize + (borderWidth * 2), 
+            minimapSize + (borderWidth * 2)
+        );
+        
+        // Redessiner la bordure blanche brillante
+        this.minimapBorder.lineStyle(2, 0xffffff, 0.8);
+        this.minimapBorder.strokeRect(
+            minimapPadding - borderWidth + 1, 
+            minimapPadding - borderWidth + 1, 
+            minimapSize + (borderWidth * 2) - 2, 
+            minimapSize + (borderWidth * 2) - 2
+        );
       }
 
-      // S'assurer que les éléments sont ignorés par la minimap
+      // S'assurer que tous les éléments d'UI sont ignorés par la minimap
       this.minimap.ignore(this.minimapBorder);
+      this.minimap.ignore(this.healthBar);
+      this.minimap.ignore(this.healthText);
+      this.minimap.ignore(this.playersAliveText);
+      this.minimap.ignore(this.weaponText);
+      this.minimap.ignore(this.zoneTimerText);
+      this.minimap.ignore(this.ammoBackground);
+      this.minimap.ignore(this.ammoText);
+      this.minimap.ignore(this.reloadingText);
     }
   }
 
@@ -1298,8 +1412,8 @@ export class GameScene extends Phaser.Scene {
     // Mettre à jour l'affichage des munitions
     if (this.ammoText) {
       if (this.currentWeapon && this.currentWeapon !== '') {
-        // Format: "Munitions: 9/9" où le premier chiffre est le nombre de munitions actuelles
-        this.ammoText.setText(`Munitions: ${ammo}/${this.maxAmmo}`);
+        // Format amélioré : "20/20 • 0" où le premier est les munitions actuelles et après le point, le nombre de chargeurs
+        this.ammoText.setText(`${ammo}/${this.maxAmmo} • ${this.magazineCount}`);
 
         // Changer la couleur en fonction du nombre de munitions
         if (ammo === 0) {
@@ -1309,9 +1423,13 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.ammoText.setColor('#ffffff'); // Blanc par défaut
         }
+        
+        // Taille de texte plus grande
+        this.ammoText.setFontSize('24px');
       } else {
         this.ammoText.setText("Pas d'arme");
         this.ammoText.setColor('#ffffff');
+        this.ammoText.setFontSize('20px');
       }
     }
   }
@@ -1330,6 +1448,11 @@ export class GameScene extends Phaser.Scene {
         repeat: Math.floor(reloadTime / 1000)
       });
 
+      // Changer l'apparence du joueur pour l'animation de rechargement
+      if (this.currentPlayer) {
+        this.currentPlayer.setTexture('player_reload');
+      }
+
       // Masquer le message après le temps de rechargement
       this.time.delayedCall(reloadTime, () => {
         this.hideReloadingMessage();
@@ -1343,6 +1466,25 @@ export class GameScene extends Phaser.Scene {
       this.reloadingText.setVisible(false);
       this.tweens.killTweensOf(this.reloadingText);
       this.reloadingText.setAlpha(1);
+      this.reloadingText.setText('RECHARGEMENT...');
+      this.reloadingText.setColor('#ffcc44');
+      
+      // Restaurer l'apparence du joueur en fonction de l'arme équipée
+      if (this.currentPlayer) {
+        // Sélectionner la texture appropriée en fonction de l'arme
+        let textureKey = 'player_hold'; // Texture par défaut (sans arme)
+        
+        if (this.currentWeapon === 'pistol') {
+          textureKey = 'player_gun';
+        } else if (this.currentWeapon === 'rifle') {
+          textureKey = 'player_silencer';
+        } else if (this.currentWeapon === 'shotgun') {
+          textureKey = 'player_machine';
+        }
+        
+        // Appliquer la texture
+        this.currentPlayer.setTexture(textureKey);
+      }
     }
   }
 
@@ -1432,6 +1574,12 @@ export class GameScene extends Phaser.Scene {
     if (this.currentPlayer && this.room && this.currentWeapon && this.currentWeapon !== '') {
       console.log("Le joueur a une arme:", this.currentWeapon);
       
+      // Vérifier si le joueur est en train de recharger
+      if (this.reloadingText && this.reloadingText.visible) {
+        console.log("Impossible de tirer pendant le rechargement");
+        return;
+      }
+      
       // Mettre à jour le temps du dernier tir
       this.lastFireTime = this.time.now;
       
@@ -1451,7 +1599,11 @@ export class GameScene extends Phaser.Scene {
         // Vérifier si le joueur a assez de munitions
         if (this.currentAmmo < ammoToConsume) {
           console.log("Pas assez de munitions pour tirer");
-          this.reloadWeapon(); // Perdre l'arme car pas assez de munitions
+          
+          // Essayer de recharger automatiquement
+          if (this.magazineCount > 0) {
+            this.reloadWeapon();
+          }
           return;
         }
         
@@ -1468,18 +1620,62 @@ export class GameScene extends Phaser.Scene {
         this.room.send('shoot', { rotation: angle });
         console.log("Tir envoyé au serveur avec rotation:", angle, "Munitions restantes:", this.currentAmmo);
         
-        // Si c'était la dernière munition, perdre l'arme
+        // Si c'était la dernière munition, vérifier si le joueur a des chargeurs
         if (this.currentAmmo <= 0) {
-          console.log("Plus de munitions, l'arme est perdue");
+          console.log("Plus de munitions après le tir");
           
-          // Plus de munitions, changer l'apparence du joueur et retirer l'arme
+          // Vérifier si le joueur a des chargeurs
+          if (this.magazineCount > 0) {
+            console.log("Rechargement automatique avec un chargeur disponible");
+            // Recharger automatiquement
+            this.reloadWeapon();
+          } else {
+            console.log("Plus de munitions et pas de chargeurs, l'arme est perdue");
+            
+            // Plus de munitions et pas de chargeurs, changer l'apparence du joueur et retirer l'arme
+            if (this.currentPlayer) {
+              this.currentPlayer.setTexture('player_hold');
+            }
+            
+            // Informer le serveur que le joueur n'a plus d'arme
+            this.room.send('dropWeapon', {});
+            
+            // Réinitialiser l'arme actuelle
+            this.currentWeapon = '';
+            
+            // Réinitialiser les munitions
+            this.maxAmmo = 0;
+            this.currentAmmo = 0;
+            this.magazineCount = 0;
+            
+            // Afficher un message "Plus de munitions"
+            if (this.ammoText) {
+              this.ammoText.setText("Pas d'arme");
+            }
+            
+            // Mettre à jour l'affichage de l'arme
+            this.updateWeaponDisplay("");
+          }
+        }
+      } else {
+        console.log("Tentative de tir sans munitions");
+        
+        // Vérifier si le joueur a des chargeurs
+        if (this.magazineCount > 0) {
+          console.log("Rechargement automatique avec un chargeur disponible");
+          // Recharger automatiquement
+          this.reloadWeapon();
+        } else {
+          console.log("Plus de munitions et pas de chargeurs, l'arme est perdue");
+          
+          // Plus de munitions et pas de chargeurs, changer l'apparence du joueur et retirer l'arme
           if (this.currentPlayer) {
             this.currentPlayer.setTexture('player_hold');
           }
           
           // Informer le serveur que le joueur n'a plus d'arme
           this.room.send('dropWeapon', {});
-          
+  
           // Réinitialiser l'arme actuelle
           this.currentWeapon = '';
           
@@ -1487,7 +1683,7 @@ export class GameScene extends Phaser.Scene {
           this.maxAmmo = 0;
           this.currentAmmo = 0;
           this.magazineCount = 0;
-          
+  
           // Afficher un message "Plus de munitions"
           if (this.ammoText) {
             this.ammoText.setText("Pas d'arme");
@@ -1496,32 +1692,6 @@ export class GameScene extends Phaser.Scene {
           // Mettre à jour l'affichage de l'arme
           this.updateWeaponDisplay("");
         }
-      } else {
-        console.log("Plus de munitions, l'arme est perdue");
-        
-        // Plus de munitions, changer l'apparence du joueur et retirer l'arme
-        if (this.currentPlayer) {
-          this.currentPlayer.setTexture('player_hold');
-        }
-        
-        // Informer le serveur que le joueur n'a plus d'arme
-        this.room.send('dropWeapon', {});
-
-        // Réinitialiser l'arme actuelle
-        this.currentWeapon = '';
-        
-        // Réinitialiser les munitions
-        this.maxAmmo = 0;
-        this.currentAmmo = 0;
-        this.magazineCount = 0;
-
-        // Afficher un message "Plus de munitions"
-        if (this.ammoText) {
-          this.ammoText.setText("Pas d'arme");
-        }
-        
-        // Mettre à jour l'affichage de l'arme
-        this.updateWeaponDisplay("");
       }
     } else {
       console.log("Le joueur n'a pas d'arme");
@@ -1544,34 +1714,29 @@ export class GameScene extends Phaser.Scene {
 
   // Méthode pour recharger l'arme
   private reloadWeapon() {
-    // Plus de rechargement possible, l'arme est perdue quand il n'y a plus de munitions
-    console.log("Plus de munitions, l'arme est perdue");
+    // Vérifier si le joueur a une arme
+    if (!this.currentWeapon || this.currentWeapon === '') {
+      console.log("Aucune arme à recharger");
+      return;
+    }
     
-    // Plus de munitions, changer l'apparence du joueur et retirer l'arme
-    if (this.currentPlayer) {
-      this.currentPlayer.setTexture('player_hold');
+    // Vérifier si le joueur est déjà en train de recharger
+    if (this.reloadingText && this.reloadingText.visible) {
+      console.log("Déjà en train de recharger");
+      return;
+    }
+    
+    // Vérifier si le joueur a besoin de recharger
+    if (this.currentAmmo === this.maxAmmo) {
+      console.log("Munitions déjà pleines");
+      return;
     }
 
-    // Informer le serveur que le joueur n'a plus d'arme
+    // Envoyer la demande de rechargement au serveur
     if (this.room) {
-      this.room.send('dropWeapon', {});
+      this.room.send('reload', {});
+      console.log("Demande de rechargement envoyée");
     }
-
-    // Réinitialiser l'arme actuelle
-    this.currentWeapon = '';
-    
-    // Réinitialiser les munitions
-    this.maxAmmo = 0;
-    this.currentAmmo = 0;
-    this.magazineCount = 0;
-
-    // Afficher un message "Plus de munitions"
-    if (this.ammoText) {
-      this.ammoText.setText("Pas d'arme");
-    }
-    
-    // Mettre à jour l'affichage de l'arme
-    this.updateWeaponDisplay("");
   }
 
   // Méthode pour vérifier et corriger les blocages du joueur par des murs invisibles
@@ -1790,6 +1955,50 @@ export class GameScene extends Phaser.Scene {
       frames: this.anims.generateFrameNumbers('shotgun', { start: 0, end: 0 }),
       frameRate: 10,
       repeat: -1
+    });
+  }
+
+  // Afficher une notification de récupération de chargeur
+  private showMagazinePickupNotification() {
+    // Créer un texte temporaire
+    const notification = this.add.text(
+      this.cameras.main.width / 2,
+      this.cameras.main.height * 0.7,
+      "CHARGEUR RÉCUPÉRÉ!",
+      {
+        fontFamily: '"Segoe UI", Arial, sans-serif',
+        fontSize: '24px',
+        color: '#44ffff',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 3
+      }
+    );
+    
+    notification.setOrigin(0.5);
+    notification.setScrollFactor(0);
+    notification.setDepth(200);
+    
+    // Animation de l'apparition et disparition
+    this.tweens.add({
+      targets: notification,
+      alpha: { from: 0, to: 1 },
+      y: { from: this.cameras.main.height * 0.75, to: this.cameras.main.height * 0.65 },
+      duration: 500,
+      ease: 'Power2',
+      onComplete: () => {
+        this.tweens.add({
+          targets: notification,
+          alpha: { from: 1, to: 0 },
+          y: { from: this.cameras.main.height * 0.65, to: this.cameras.main.height * 0.6 },
+          duration: 800,
+          ease: 'Power2',
+          delay: 1000,
+          onComplete: () => {
+            notification.destroy();
+          }
+        });
+      }
     });
   }
 } 

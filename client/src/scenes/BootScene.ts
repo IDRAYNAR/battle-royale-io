@@ -26,6 +26,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image('player_machine', 'assets/PNG/Characters/ManBlue/manBlue_machine.png');
     this.load.image('player_silencer', 'assets/PNG/Characters/ManBlue/manBlue_silencer.png');
     this.load.image('player_hold', 'assets/PNG/Characters/ManBlue/manBlue_hold.png');
+    this.load.image('player_reload', 'assets/PNG/Characters/ManBlue/manBlue_reload.png');
     this.load.image('enemy', 'assets/PNG/Characters/ManBrown/manBrown_gun.png');
     
     // Armes
@@ -182,7 +183,7 @@ export class BootScene extends Phaser.Scene {
   // Vérification et création d'assets par défaut si nécessaire
   private createDefaultAssetsIfNeeded() {
     const requiredAssets = [
-      'background', 'player', 'player_gun', 'player_machine', 'player_silencer', 'player_hold',
+      'background', 'player', 'player_gun', 'player_machine', 'player_silencer', 'player_hold', 'player_reload',
       'enemy', 'bullet', 'pistol', 'rifle', 'shotgun', 'safeZone',
       'button', 'healthBar'
       // 'characters', 'tiles' // Commenté car nous n'utilisons plus ces spritesheets

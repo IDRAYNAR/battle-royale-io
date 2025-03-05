@@ -43,7 +43,8 @@ export class MenuScene extends Phaser.Scene {
     
     // Titre avec typographie moderne et effet 3D
     const titleSize = Math.min(64, width * 0.09);
-    const titleY = panelY + panelHeight * 0.2;
+    const padding = panelHeight * 0.07; // Padding uniforme pour le haut et le bas
+    const titleY = panelY + padding;
     const title = this.add.text(width/2, titleY, 'BATTLE ROYALE 2D', {
       fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${titleSize}px`,
@@ -104,72 +105,97 @@ export class MenuScene extends Phaser.Scene {
     
     // Sous-titre élégant
     const subtitleSize = Math.min(24, width * 0.035);
-    this.add.text(width/2, panelY + panelHeight * 0.32, 'Le dernier survivant remporte la partie !', {
+    this.add.text(width/2, titleY + titleSize * 0.9, 'Le dernier survivant remporte la partie !', {
       fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${subtitleSize}px`,
       color: '#ffffff',
       fontStyle: 'normal'
     }).setOrigin(0.5).setAlpha(0.8);
     
+    // Calculer l'espace disponible pour les éléments interactifs
+    const availableSpace = panelHeight - (2 * padding) - (titleSize * 1.2) - subtitleSize;
+    
     // Bouton de démarrage moderne avec effet de surbrillance
-    const buttonY = panelY + panelHeight * 0.45; // Légèrement remonté
+    const buttonY = titleY + titleSize * 1.5 + subtitleSize;
     const buttonWidth = Math.min(250, panelWidth * 0.4);
     const buttonHeight = Math.min(70, panelHeight * 0.09);
     
     // Fond du bouton avec effet glassmorphism
-    const playButton = this.add.graphics();
-    playButton.fillStyle(0x13674c, 0.8);
-    playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+    const createRoomButton = this.add.graphics();
+    createRoomButton.fillStyle(0x13674c, 0.8);
+    createRoomButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
     
     // Bordure du bouton
-    playButton.lineStyle(1.5, 0x5effc3, 0.3);
-    playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+    createRoomButton.lineStyle(1.5, 0x5effc3, 0.3);
+    createRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
     
     // Zone interactive pour le bouton
-    const buttonZone = this.add.zone(width/2, buttonY + buttonHeight/2, buttonWidth, buttonHeight).setInteractive();
+    const createRoomZone = this.add.zone(width/2, buttonY + buttonHeight/2, buttonWidth, buttonHeight).setInteractive();
     
     // Texte du bouton
     const buttonTextSize = Math.min(28, width * 0.04);
-    const playText = this.add.text(width/2, buttonY + buttonHeight/2, 'JOUER', {
+    const createRoomText = this.add.text(width/2, buttonY + buttonHeight/2, 'CRÉER UNE SALLE', {
       fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${buttonTextSize}px`,
       color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    // Effet de hover
-    buttonZone.on('pointerover', () => {
-      playButton.clear();
+    // Fond du deuxième bouton avec effet glassmorphism
+    const spaceBetweenButtons = Math.min(15, panelHeight * 0.02);
+    const joinRoomY = buttonY + buttonHeight + spaceBetweenButtons;
+    const joinRoomButton = this.add.graphics();
+    joinRoomButton.fillStyle(0x13674c, 0.8);
+    joinRoomButton.fillRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+    
+    // Bordure du bouton
+    joinRoomButton.lineStyle(1.5, 0x5effc3, 0.3);
+    joinRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+    
+    // Zone interactive pour le bouton
+    const joinRoomZone = this.add.zone(width/2, joinRoomY + buttonHeight/2, buttonWidth, buttonHeight).setInteractive();
+    
+    // Texte du bouton
+    const joinRoomText = this.add.text(width/2, joinRoomY + buttonHeight/2, 'REJOINDRE', {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+      fontSize: `${buttonTextSize}px`,
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Effet de hover pour CRÉER UNE SALLE
+    createRoomZone.on('pointerover', () => {
+      createRoomButton.clear();
       // Couleur du bouton en survol
-      playButton.fillStyle(0x1d936c, 0.9);
-      playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
-      playButton.lineStyle(2, 0x7dffd8, 0.5);
-      playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      createRoomButton.fillStyle(0x1d936c, 0.9);
+      createRoomButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      createRoomButton.lineStyle(2, 0x7dffd8, 0.5);
+      createRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
       
-      playText.setScale(1.03);
+      createRoomText.setScale(1.03);
     });
     
-    buttonZone.on('pointerout', () => {
-      playButton.clear();
+    createRoomZone.on('pointerout', () => {
+      createRoomButton.clear();
       // Retour à la couleur normale
-      playButton.fillStyle(0x13674c, 0.8);
-      playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
-      playButton.lineStyle(1.5, 0x5effc3, 0.3);
-      playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      createRoomButton.fillStyle(0x13674c, 0.8);
+      createRoomButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      createRoomButton.lineStyle(1.5, 0x5effc3, 0.3);
+      createRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
       
-      playText.setScale(1);
+      createRoomText.setScale(1);
     });
     
-    // Effet de clic
-    buttonZone.on('pointerdown', () => {
+    // Effet de clic pour CRÉER UNE SALLE
+    createRoomZone.on('pointerdown', () => {
       // Animation de pression
-      playButton.clear();
-      playButton.fillStyle(0x0f4e3a, 1);
-      playButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
-      playButton.lineStyle(1, 0x5effc3, 0.2);
-      playButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      createRoomButton.clear();
+      createRoomButton.fillStyle(0x0f4e3a, 1);
+      createRoomButton.fillRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
+      createRoomButton.lineStyle(1, 0x5effc3, 0.2);
+      createRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, buttonY, buttonWidth, buttonHeight, 12);
       
-      playText.setY(buttonY + buttonHeight/2 + 2);
+      createRoomText.setY(buttonY + buttonHeight/2 + 2);
       
       // Effet de flash
       this.cameras.main.flash(300, 255, 255, 255, true);
@@ -179,16 +205,64 @@ export class MenuScene extends Phaser.Scene {
         this.sound.play('click');
       }
       
-      // Transition vers la scène de jeu après un court délai
+      // Transition vers la GameScene pour créer une salle
       this.time.delayedCall(500, () => {
         this.scene.start('GameScene');
       });
     });
     
+    // Effet de hover pour REJOINDRE
+    joinRoomZone.on('pointerover', () => {
+      joinRoomButton.clear();
+      // Couleur du bouton en survol
+      joinRoomButton.fillStyle(0x1d936c, 0.9);
+      joinRoomButton.fillRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+      joinRoomButton.lineStyle(2, 0x7dffd8, 0.5);
+      joinRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+      
+      joinRoomText.setScale(1.03);
+    });
+    
+    joinRoomZone.on('pointerout', () => {
+      joinRoomButton.clear();
+      // Retour à la couleur normale
+      joinRoomButton.fillStyle(0x13674c, 0.8);
+      joinRoomButton.fillRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+      joinRoomButton.lineStyle(1.5, 0x5effc3, 0.3);
+      joinRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+      
+      joinRoomText.setScale(1);
+    });
+    
+    // Effet de clic pour REJOINDRE
+    joinRoomZone.on('pointerdown', () => {
+      // Animation de pression
+      joinRoomButton.clear();
+      joinRoomButton.fillStyle(0x0f4e3a, 1);
+      joinRoomButton.fillRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+      joinRoomButton.lineStyle(1, 0x5effc3, 0.2);
+      joinRoomButton.strokeRoundedRect(width/2 - buttonWidth/2, joinRoomY, buttonWidth, buttonHeight, 12);
+      
+      joinRoomText.setY(joinRoomY + buttonHeight/2 + 2);
+      
+      // Effet de flash
+      this.cameras.main.flash(300, 255, 255, 255, true);
+      
+      // Son de clic (si disponible)
+      if (this.sound.get('click')) {
+        this.sound.play('click');
+      }
+      
+      // Transition vers la scène de sélection de salle
+      this.time.delayedCall(500, () => {
+        this.scene.start('RoomSelectionScene');
+      });
+    });
+    
     // Ajout d'un bouton pour choisir la disposition du clavier
-    const keyboardButtonY = buttonY + buttonHeight + 20; // Réduit l'espace entre les boutons
-    const keyboardButtonHeight = buttonHeight * 0.7; // Légèrement plus petit
-    const keyboardButtonWidth = buttonWidth * 1.25; // Élargi pour contenir le texte QWERTY
+    const keyboardButtonY = joinRoomY + buttonHeight + spaceBetweenButtons;
+    const keyboardButtonHeight = buttonHeight * 0.7;
+    const keyboardButtonWidth = buttonWidth * 1.25;
     
     // Création du bouton pour la disposition du clavier
     const keyboardButton = this.add.graphics();
@@ -290,17 +364,18 @@ export class MenuScene extends Phaser.Scene {
     });
     
     // Panneau d'instructions avec design moderne
-    const instructionsY = keyboardButtonY + keyboardButtonHeight + 20; // Ajusté en fonction du bouton clavier
-    const instrHeight = panelHeight * 0.29; // Ajusté pour s'adapter à l'espace restant
+    // Calcul pour garantir que le bas des instructions est à exactement "padding" du bas du panneau
+    const instructionsHeight = panelHeight * 0.28;
+    const instructionsY = panelY + panelHeight - padding - instructionsHeight;
     const instrWidth = panelWidth * 0.85;
     const instrX = width/2 - instrWidth/2;
     
     // Création d'un conteneur pour les instructions avec effet glassmorphism
     const instructionsPanel = this.add.graphics();
     instructionsPanel.fillStyle(0xffffff, 0.05);
-    instructionsPanel.fillRoundedRect(instrX, instructionsY, instrWidth, instrHeight, 16);
+    instructionsPanel.fillRoundedRect(instrX, instructionsY, instrWidth, instructionsHeight, 16);
     instructionsPanel.lineStyle(1, 0xffffff, 0.1);
-    instructionsPanel.strokeRoundedRect(instrX, instructionsY, instrWidth, instrHeight, 16);
+    instructionsPanel.strokeRoundedRect(instrX, instructionsY, instrWidth, instructionsHeight, 16);
     
     // Titre des instructions
     const instrTitleSize = Math.min(22, width * 0.032);
@@ -327,7 +402,7 @@ export class MenuScene extends Phaser.Scene {
     
     const instrTextSize = Math.min(16, width * 0.024);
     const iconSize = Math.min(20, width * 0.03);
-    const lineHeight = instrHeight / 6;
+    const lineHeight = (instructionsHeight - 50) / 5; // Espace distribué également pour les 4 instructions + espacement
     
     // Effacer les références précédentes si elles existent
     this.instructionTexts = [];
@@ -363,6 +438,13 @@ export class MenuScene extends Phaser.Scene {
       }
     });
     
+    // Vérifier que le positionnement vertical est correct
+    console.log(`Panneau: ${panelY} à ${panelY + panelHeight}`);
+    console.log(`Titre: ${titleY}`);
+    console.log(`Instructions: ${instructionsY} à ${instructionsY + instructionsHeight}`);
+    console.log(`Padding haut: ${titleY - panelY}`);
+    console.log(`Padding bas: ${(panelY + panelHeight) - (instructionsY + instructionsHeight)}`);
+
     // Ajout d'un écouteur pour le redimensionnement
     this.scale.on('resize', this.resize, this);
   }

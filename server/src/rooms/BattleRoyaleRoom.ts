@@ -67,7 +67,17 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   private minWeapons: number = 15;
 
   onCreate(options: any) {
+    // Initialisation de l'état du jeu
     this.setState(new BattleRoyaleState());
+    
+    // Configuration des métadonnées de la salle (pour l'affichage dans la liste)
+    this.setMetadata({
+      name: options.name || `Salle ${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString()
+    });
+    
+    // Nombre maximum de joueurs par salle
+    this.maxClients = 10;
 
     // Gestion des messages du client
     this.onMessage("move", (client, data) => {

@@ -34,6 +34,8 @@ const gameServer = new Server({
 });
 
 // Enregistrement de notre salle de jeu
+// Au lieu d'enregistrer une salle fixe, on définit le modèle de salle
+// Les noms de salles seront créés dynamiquement par le client
 gameServer.define("battle_royale", BattleRoyaleRoom);
 
 // Démarrage du serveur

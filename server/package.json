@@ -16,13 +16,15 @@
   "dependencies": {
     "@colyseus/monitor": "^0.15.0",
     "@colyseus/schema": "^2.0.0",
-    "@types/cors": "^2.8.17",
     "colyseus": "^0.15.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "typescript": "^5.8.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.9",
     "ts-node": "^10.9.1",
     "ts-node-dev": "^2.0.0"
   }

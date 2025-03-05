@@ -121,7 +121,14 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  init() {
+  init(data: any) {
+    // Vérifier si une salle est passée en paramètre
+    if (data && data.room) {
+      console.log("GameScene: Salle reçue en paramètre");
+      this.room = data.room;
+      return;
+    }
+    
     // Configuration de l'URL du serveur en fonction de l'environnement
     const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? `ws://${window.location.hostname}:2567` // URL locale pour le développement
@@ -133,19 +140,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   async create() {
-    // Connexion à la salle de jeu
-    try {
-      this.room = await this.client.joinOrCreate('battle_royale');
-      this.setupRoom();
-    } catch (error) {
-      console.error('Erreur de connexion à la salle:', error);
-      this.add.text(400, 300, 'Erreur de connexion au serveur', {
-        fontFamily: 'Arial',
-        fontSize: '24px',
-        color: '#ffffff'
-      }).setOrigin(0.5);
-      return;
+    // Si nous n'avons pas déjà une salle (passée via init), on se connecte
+    if (!this.room) {
+      try {
+        // Création d'une salle par défaut
+        this.room = await this.client.joinOrCreate('battle_royale');
+      } catch (error) {
+        console.error('Erreur de connexion à la salle:', error);
+        this.add.text(400, 300, 'Erreur de connexion au serveur', {
+          fontFamily: 'Arial',
+          fontSize: '24px',
+          color: '#ffffff'
+        }).setOrigin(0.5);
+        return;
+      }
     }
+    
+    // Configuration des événements de la salle
+    this.setupRoom();
 
     // Créer des couches pour organiser les objets du jeu et l'interface utilisateur
     // Nous utilisons ces conteneurs uniquement pour gérer ce qui est ignoré par la minimap

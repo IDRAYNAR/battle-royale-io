@@ -4,12 +4,20 @@ export class MenuScene extends Phaser.Scene {
   private gradientBg: Phaser.GameObjects.Graphics | null = null;
   private glowEffect: Phaser.GameObjects.Graphics | null = null;
   private glowTween: Phaser.Tweens.Tween | null = null;
+  private keyboardLayout: string = 'auto'; // Valeur par défaut: détection automatique
+  private instructionTexts: Phaser.GameObjects.Text[] = []; // Pour stocker les références aux textes d'instructions
 
   constructor() {
     super({ key: 'MenuScene' });
   }
 
   create() {
+    // Récupération de la disposition du clavier sauvegardée
+    const savedLayout = localStorage.getItem('keyboardLayout');
+    if (savedLayout) {
+      this.keyboardLayout = savedLayout;
+    }
+    
     // Récupération des dimensions de l'écran
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
@@ -33,21 +41,62 @@ export class MenuScene extends Phaser.Scene {
     menuPanel.lineStyle(2, 0xffffff, 0.1);
     menuPanel.strokeRoundedRect(panelX, panelY, panelWidth, panelHeight, 24);
     
-    // Titre avec typographie moderne
+    // Titre avec typographie moderne et effet 3D
     const titleSize = Math.min(64, width * 0.09);
-    const title = this.add.text(width/2, panelY + panelHeight * 0.2, 'BATTLE ROYALE 2D', {
+    const titleY = panelY + panelHeight * 0.2;
+    const title = this.add.text(width/2, titleY, 'BATTLE ROYALE 2D', {
       fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: `${titleSize}px`,
       color: '#ffffff',
       fontStyle: 'bold',
-      shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 3, fill: true }
+      shadow: { offsetX: 3, offsetY: 3, color: '#000', blur: 5, fill: true }
     }).setOrigin(0.5);
     
-    // Animation subtile du titre
+    // Effet 3D pour le titre avec des couches
+    const shadowDepth = 5;
+    const shadowColor = 0x3498db; // Couleur bleue pour l'effet 3D
+    
+    // Créer un conteneur pour le titre et ses ombres
+    const titleContainer = this.add.container(width/2, titleY);
+    
+    // Ajouter des couches d'ombre derrière le texte pour l'effet 3D
+    const shadowTexts = [];
+    for (let i = 1; i <= shadowDepth; i++) {
+      const shadowText = this.add.text(
+        i, 
+        i, 
+        'BATTLE ROYALE 2D', 
+        {
+          fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+          fontSize: `${titleSize}px`,
+          color: `#${(shadowColor - (i * 0x0e0e0e)).toString(16)}`,
+          fontStyle: 'bold'
+        }
+      ).setOrigin(0.5).setDepth(-i);
+      
+      shadowTexts.push(shadowText);
+      titleContainer.add(shadowText);
+    }
+    
+    // Ajouter le texte principal au conteneur
+    titleContainer.add(title);
+    title.setPosition(0, 0); // Réinitialiser la position car maintenant dans le conteneur
+    
+    // Animation de rebond pour le titre (effet 3D)
     this.tweens.add({
-      targets: title,
-      alpha: { from: 0.9, to: 1 },
-      duration: 2000,
+      targets: titleContainer,
+      y: { from: titleY - 5, to: titleY + 5 },
+      duration: 1500,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Effet de pulsation pour renforcer l'effet 3D
+    this.tweens.add({
+      targets: titleContainer,
+      scale: { from: 1, to: 1.05 },
+      duration: 1200,
       ease: 'Sine.easeInOut',
       yoyo: true,
       repeat: -1
@@ -63,7 +112,7 @@ export class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0.8);
     
     // Bouton de démarrage moderne avec effet de surbrillance
-    const buttonY = panelY + panelHeight * 0.48;
+    const buttonY = panelY + panelHeight * 0.45; // Légèrement remonté
     const buttonWidth = Math.min(250, panelWidth * 0.4);
     const buttonHeight = Math.min(70, panelHeight * 0.09);
     
@@ -136,9 +185,113 @@ export class MenuScene extends Phaser.Scene {
       });
     });
     
+    // Ajout d'un bouton pour choisir la disposition du clavier
+    const keyboardButtonY = buttonY + buttonHeight + 20; // Réduit l'espace entre les boutons
+    const keyboardButtonHeight = buttonHeight * 0.7; // Légèrement plus petit
+    const keyboardButtonWidth = buttonWidth * 1.25; // Élargi pour contenir le texte QWERTY
+    
+    // Création du bouton pour la disposition du clavier
+    const keyboardButton = this.add.graphics();
+    keyboardButton.fillStyle(0x13674c, 0.8);
+    keyboardButton.fillRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+    
+    // Ajout d'un effet de lueur subtil au bouton clavier
+    const keyboardGlow = this.add.graphics();
+    keyboardGlow.fillStyle(0x5effc3, 0.2);
+    keyboardGlow.fillRoundedRect(
+      width/2 - keyboardButtonWidth/2 - 3, 
+      keyboardButtonY - 3, 
+      keyboardButtonWidth + 6, 
+      keyboardButtonHeight + 6, 
+      14
+    );
+    keyboardGlow.setAlpha(0);
+    
+    // Animation de pulsation pour la lueur du bouton
+    this.tweens.add({
+      targets: keyboardGlow,
+      alpha: { from: 0, to: 0.7 },
+      duration: 1500,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+    
+    keyboardButton.lineStyle(1.5, 0x5effc3, 0.3);
+    keyboardButton.strokeRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+    
+    const keyboardButtonZone = this.add.zone(width/2, keyboardButtonY + keyboardButtonHeight/2, keyboardButtonWidth, keyboardButtonHeight).setInteractive();
+    
+    // Texte du bouton qui change en fonction de la disposition actuelle
+    const keyboardButtonTextSize = Math.min(20, width * 0.03);
+    const keyboardText = this.add.text(width/2, keyboardButtonY + keyboardButtonHeight/2, this.getKeyboardLayoutText(), {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+      fontSize: `${keyboardButtonTextSize}px`,
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Effet de hover
+    keyboardButtonZone.on('pointerover', () => {
+      keyboardButton.clear();
+      // Couleur du bouton en survol
+      keyboardButton.fillStyle(0x1d936c, 0.9);
+      keyboardButton.fillRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+      keyboardButton.lineStyle(2, 0x7dffd8, 0.5);
+      keyboardButton.strokeRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+      
+      keyboardText.setScale(1.03);
+      keyboardGlow.setAlpha(0.8);
+    });
+    
+    keyboardButtonZone.on('pointerout', () => {
+      keyboardButton.clear();
+      // Retour à la couleur normale
+      keyboardButton.fillStyle(0x13674c, 0.8);
+      keyboardButton.fillRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+      keyboardButton.lineStyle(1.5, 0x5effc3, 0.3);
+      keyboardButton.strokeRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+      
+      keyboardText.setScale(1);
+    });
+    
+    // Effet de clic pour changer la disposition du clavier
+    keyboardButtonZone.on('pointerdown', () => {
+      // Animation de pression
+      keyboardButton.clear();
+      keyboardButton.fillStyle(0x0f4e3a, 1);
+      keyboardButton.fillRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+      keyboardButton.lineStyle(1, 0x5effc3, 0.2);
+      keyboardButton.strokeRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+      
+      keyboardText.setY(keyboardButtonY + keyboardButtonHeight/2 + 2);
+      
+      // Changer cycliquement la disposition du clavier
+      this.cycleKeyboardLayout();
+      
+      // Mettre à jour le texte du bouton
+      keyboardText.setText(this.getKeyboardLayoutText());
+      
+      // Son de clic (si disponible)
+      if (this.sound.get('click')) {
+        this.sound.play('click');
+      }
+      
+      // Effet visuel pour confirmer le changement
+      this.time.delayedCall(200, () => {
+        keyboardButton.clear();
+        keyboardButton.fillStyle(0x13674c, 0.8);
+        keyboardButton.fillRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+        keyboardButton.lineStyle(1.5, 0x5effc3, 0.3);
+        keyboardButton.strokeRoundedRect(width/2 - keyboardButtonWidth/2, keyboardButtonY, keyboardButtonWidth, keyboardButtonHeight, 12);
+        
+        keyboardText.setY(keyboardButtonY + keyboardButtonHeight/2);
+      });
+    });
+    
     // Panneau d'instructions avec design moderne
-    const instructionsY = panelY + panelHeight * 0.65;
-    const instrHeight = panelHeight * 0.28;
+    const instructionsY = keyboardButtonY + keyboardButtonHeight + 20; // Ajusté en fonction du bouton clavier
+    const instrHeight = panelHeight * 0.29; // Ajusté pour s'adapter à l'espace restant
     const instrWidth = panelWidth * 0.85;
     const instrX = width/2 - instrWidth/2;
     
@@ -160,7 +313,13 @@ export class MenuScene extends Phaser.Scene {
     
     // Instructions avec icônes modernes
     const instructions = [
-      { text: 'Utilisez les touches ZQSD pour vous déplacer', icon: '⌨️' },
+      { 
+        id: 'movement',
+        text: this.isFrenchKeyboard() ? 
+          'Utilisez les touches ZQSD pour vous déplacer' : 
+          'Utilisez les touches WASD pour vous déplacer', 
+        icon: '⌨️' 
+      },
       { text: 'Cliquez pour tirer', icon: '🖱️' },
       { text: 'Ramassez des armes pour augmenter votre puissance', icon: '🔫' },
       { text: 'Restez dans la zone sûre pour survivre', icon: '🛡️' }
@@ -170,20 +329,38 @@ export class MenuScene extends Phaser.Scene {
     const iconSize = Math.min(20, width * 0.03);
     const lineHeight = instrHeight / 6;
     
+    // Effacer les références précédentes si elles existent
+    this.instructionTexts = [];
+    
     instructions.forEach((instruction, index) => {
       const y = instructionsY + 60 + (index * lineHeight);
       
-      // Icône
-      this.add.text(instrX + 25, y, instruction.icon, {
+      // Icône avec effet de pulsation 
+      const icon = this.add.text(instrX + 25, y, instruction.icon, {
         fontSize: `${iconSize}px`
       }).setOrigin(0.5);
       
+      // Petite animation pour les icônes
+      this.tweens.add({
+        targets: icon,
+        scale: { from: 1, to: 1.15 },
+        duration: 800 + (index * 200),
+        ease: 'Cubic.easeInOut',
+        yoyo: true,
+        repeat: -1
+      });
+      
       // Texte
-      this.add.text(instrX + 50, y, instruction.text, {
+      const textObj = this.add.text(instrX + 50, y, instruction.text, {
         fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
         fontSize: `${instrTextSize}px`,
         color: '#ffffff'
       }).setOrigin(0, 0.5).setAlpha(0.85);
+      
+      // Stocker le texte avec son ID pour pouvoir le mettre à jour plus tard
+      if ('id' in instruction) {
+        this.instructionTexts.push(textObj);
+      }
     });
     
     // Ajout d'un écouteur pour le redimensionnement
@@ -250,5 +427,63 @@ export class MenuScene extends Phaser.Scene {
     
     // Recréer la scène pour adapter tous les éléments
     this.scene.restart();
+  }
+  
+  // Fonction pour obtenir le texte à afficher sur le bouton de disposition du clavier
+  private getKeyboardLayoutText(): string {
+    switch(this.keyboardLayout) {
+      case 'qwerty':
+        return 'Clavier: QWERTY (WASD)';
+      case 'azerty':
+        return 'Clavier: AZERTY (ZQSD)';
+      default:
+        return 'Clavier: Auto-détection';
+    }
+  }
+  
+  // Fonction pour changer cycliquement la disposition du clavier
+  private cycleKeyboardLayout(): void {
+    if (this.keyboardLayout === 'auto') {
+      this.keyboardLayout = 'qwerty';
+    } else if (this.keyboardLayout === 'qwerty') {
+      this.keyboardLayout = 'azerty';
+    } else {
+      this.keyboardLayout = 'auto';
+    }
+    
+    // Sauvegarder la préférence dans le localStorage
+    localStorage.setItem('keyboardLayout', this.keyboardLayout);
+    
+    // Mettre à jour le texte des instructions de mouvement
+    this.updateMovementInstructions();
+  }
+  
+  // Mettre à jour le texte des instructions de mouvement
+  private updateMovementInstructions(): void {
+    if (this.instructionTexts.length > 0) {
+      // Le premier élément est l'instruction de mouvement
+      const movementText = this.instructionTexts[0];
+      
+      // Mettre à jour le texte en fonction de la disposition du clavier
+      if (this.isFrenchKeyboard()) {
+        movementText.setText('Utilisez les touches ZQSD pour vous déplacer');
+      } else {
+        movementText.setText('Utilisez les touches WASD pour vous déplacer');
+      }
+    }
+  }
+  
+  // Fonction auxiliaire pour vérifier si on utilise le clavier AZERTY
+  private isFrenchKeyboard(): boolean {
+    // Si l'utilisateur a explicitement choisi une disposition
+    if (this.keyboardLayout === 'azerty') {
+      return true;
+    } else if (this.keyboardLayout === 'qwerty') {
+      return false;
+    }
+    
+    // Sinon, utiliser la détection automatique basée sur la langue du navigateur
+    const userLanguage = navigator.language || (navigator as any).userLanguage || '';
+    return userLanguage.toLowerCase().startsWith('fr');
   }
 }

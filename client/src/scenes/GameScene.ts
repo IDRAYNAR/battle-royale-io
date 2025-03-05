@@ -263,6 +263,9 @@ export class GameScene extends Phaser.Scene {
 
     // Vérifier les propriétés de collision des tuiles
     this.checkTileCollisionProperties();
+    
+    // Envoyer les informations sur les colliders au serveur
+    this.reportColliders();
 
     // Création des animations pour les personnages
     this.createAnimations();
@@ -2300,5 +2303,136 @@ export class GameScene extends Phaser.Scene {
     
     // Par défaut, utiliser la détection de langue
     return isFrenchLocale;
+  }
+
+  // Analyser la carte pour trouver les éléments avec des colliders et les signaler au serveur
+  private reportColliders() {
+    if (!this.room) return;
+    
+    console.log("Analyse des colliders pour le serveur...");
+    
+    // Fonction utilitaire pour signaler un collider au serveur
+    const reportCollider = (x: number, y: number, radius: number) => {
+      if (this.room) {
+        this.room.send("reportCollider", { x, y, radius });
+      }
+    };
+    
+    // 1. Parcourir toutes les couches de tuiles avec des collisions
+    const layers = [this.groundLayer, this.collisionLayer, this.detailsLayer].filter(layer => !!layer);
+    
+    // Pour chaque couche, nous allons essayer de regrouper les tuiles adjacentes
+    // pour réduire le nombre de colliders envoyés au serveur
+    layers.forEach(layer => {
+      // Créer une grille pour marquer les tuiles déjà traitées
+      const gridWidth = layer.width;
+      const gridHeight = layer.height;
+      const visited = Array(gridHeight).fill(0).map(() => Array(gridWidth).fill(false));
+      
+      // Fonction pour vérifier si une tuile a une collision
+      const hasTileCollision = (x: number, y: number): boolean => {
+        if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) return false;
+        const tile = layer.getTileAt(x, y);
+        return tile && tile.properties && tile.properties.collides;
+      };
+      
+      // Parcourir la grille et trouver des zones de collision
+      for (let y = 0; y < gridHeight; y++) {
+        for (let x = 0; x < gridWidth; x++) {
+          // Ignorer les tuiles déjà visitées ou sans collision
+          if (visited[y][x] || !hasTileCollision(x, y)) continue;
+          
+          // Trouver la taille maximale du rectangle de tuiles adjacentes avec collision
+          let width = 1;
+          let height = 1;
+          
+          // Élargir horizontalement
+          while (x + width < gridWidth && hasTileCollision(x + width, y) && !visited[y][x + width]) {
+            width++;
+          }
+          
+          // Puis élargir verticalement
+          let canExpand = true;
+          while (canExpand && y + height < gridHeight) {
+            // Vérifier que toute la nouvelle ligne a des tuiles avec collision
+            for (let i = 0; i < width; i++) {
+              if (!hasTileCollision(x + i, y + height) || visited[y + height][x + i]) {
+                canExpand = false;
+                break;
+              }
+            }
+            
+            if (canExpand) {
+              height++;
+            }
+          }
+          
+          // Marquer toutes les tuiles de ce rectangle comme visitées
+          for (let j = 0; j < height; j++) {
+            for (let i = 0; i < width; i++) {
+              visited[y + j][x + i] = true;
+            }
+          }
+          
+          // Calculer la position centrale et le rayon de cette zone
+          const tile = layer.getTileAt(x, y);
+          if (!tile) continue;
+          
+          const centerX = tile.pixelX + (tile.width * width / 2);
+          const centerY = tile.pixelY + (tile.height * height / 2);
+          
+          // Pour le rayon, utiliser la moitié de la diagonale du rectangle
+          const radius = Math.sqrt(Math.pow(tile.width * width, 2) + Math.pow(tile.height * height, 2)) / 2;
+          
+          // Signaler cette zone au serveur
+          reportCollider(centerX, centerY, radius);
+        }
+      }
+    });
+    
+    // 2. Signaler les objets avec des collisions (comme des murs, des arbres, etc.)
+    const objectLayers = this.map.objects;
+    
+    if (objectLayers) {
+      objectLayers.forEach(objectLayer => {
+        const objects = objectLayer.objects;
+        
+        if (objects) {
+          objects.forEach(object => {
+            // Si l'objet a des propriétés de collision ou est un obstacle
+            if (object.properties) {
+              const hasCollision = object.properties.find((p: { name: string, value: boolean }) => 
+                p.name === "collides" && p.value === true);
+              const isObstacle = object.properties.find((p: { name: string, value: boolean }) => 
+                p.name === "obstacle" && p.value === true);
+                
+              if (hasCollision || isObstacle) {
+                // Calculer la position centrale de l'objet
+                const objX = object.x || 0;
+                const objY = object.y || 0;
+                const centerX = objX + (object.width ? object.width / 2 : 0);
+                const centerY = objY + (object.height ? object.height / 2 : 0);
+                
+                // Déterminer un rayon approprié pour l'objet
+                let radius;
+                
+                if (object.width && object.height) {
+                  // Pour les rectangles, utiliser la moitié de la diagonale comme rayon
+                  radius = Math.sqrt(Math.pow(object.width, 2) + Math.pow(object.height, 2)) / 2;
+                } else {
+                  // Pour les points, utiliser un rayon par défaut
+                  radius = 32;
+                }
+                
+                // Signaler ce collider au serveur
+                reportCollider(centerX, centerY, radius);
+              }
+            }
+          });
+        }
+      });
+    }
+    
+    console.log("Analyse des colliders terminée.");
   }
 } 

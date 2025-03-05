@@ -66,6 +66,9 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   // Nombre minimum d'armes sur la carte
   private minWeapons: number = 15;
 
+  // Liste des positions des obstacles avec collider
+  private colliderPositions: Array<{x: number, y: number, radius: number}> = [];
+
   onCreate(options: any) {
     // Initialisation de l'état du jeu
     this.setState(new BattleRoyaleState());
@@ -78,6 +81,13 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     
     // Nombre maximum de joueurs par salle
     this.maxClients = 10;
+
+    // Configuration des dimensions de la carte
+    this.state.mapWidth = 3968; // 62 tiles * 64 pixels
+    this.state.mapHeight = 3968; // 62 tiles * 64 pixels
+    
+    // Tableau pour stocker les positions des obstacles avec collider
+    // const colliderPositions: Array<{x: number, y: number, radius: number}> = [];
 
     // Gestion des messages du client
     this.onMessage("move", (client, data) => {
@@ -365,6 +375,19 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       x: this.state.safeZoneX,
       y: this.state.safeZoneY,
       nextShrinkTime: this.state.nextShrinkTime
+    });
+    
+    // Ajouter un gestionnaire pour recevoir les positions des obstacles avec collider
+    this.onMessage("reportCollider", (client, data) => {
+      // Vérifier si les données sont valides
+      if (data && typeof data.x === 'number' && typeof data.y === 'number' && typeof data.radius === 'number') {
+        // Ajouter la position de l'obstacle à la liste des positions à éviter
+        this.colliderPositions.push({
+          x: data.x,
+          y: data.y,
+          radius: data.radius
+        });
+      }
     });
     
     // Démarrage de la boucle de jeu
@@ -683,10 +706,14 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     return Math.random().toString(36).substring(2, 9);
   }
 
-  // Trouver une position sûre pour faire apparaître un joueur
+  // Trouver une position sûre pour faire apparaître un joueur ou une arme
   private findSafeSpawnPosition(): { x: number, y: number } {
     const minDistanceBetweenPlayers = 300; // Distance minimale entre les joueurs
     const maxAttempts = 50; // Nombre maximum de tentatives
+    
+    // Liste des positions à éviter (positions connues d'éléments avec des colliders)
+    // Cette liste pourrait être remplie dynamiquement par les clients
+    // const colliderPositions: Array<{x: number, y: number, radius: number}> = [];
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       // Générer une position aléatoire dans la zone sûre
@@ -710,6 +737,21 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
         }
       });
       
+      // Vérifier si la position est éloignée des éléments avec des colliders
+      const safeDistanceFromColliders = 50; // Distance minimale des éléments avec collider
+      
+      for (const collider of this.colliderPositions) {
+        const distanceToCollider = Math.sqrt(
+          Math.pow(x - collider.x, 2) + 
+          Math.pow(y - collider.y, 2)
+        );
+        
+        if (distanceToCollider < (collider.radius + safeDistanceFromColliders)) {
+          isFarEnough = false;
+          break;
+        }
+      }
+      
       // Si la position est valide, la retourner
       if (isFarEnough) {
         console.log(`Position de spawn trouvée: (${x}, ${y})`);
@@ -718,8 +760,36 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     }
     
     // Si aucune position n'a été trouvée après le nombre maximum de tentatives,
-    // générer une position aléatoire dans la zone sûre sans tenir compte des autres joueurs
+    // générer une position aléatoire dans la zone sûre sans tenir compte des éléments avec collider
+    // mais en respectant la distance des autres joueurs
     console.log("Aucune position idéale trouvée, génération d'une position aléatoire dans la zone sûre");
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * (this.state.safeZoneRadius * 0.7);
+      const x = this.state.safeZoneX + Math.cos(angle) * distance;
+      const y = this.state.safeZoneY + Math.sin(angle) * distance;
+      
+      // Vérifier seulement la distance avec les autres joueurs
+      let isFarEnough = true;
+      
+      this.state.players.forEach((otherPlayer) => {
+        const distanceToPlayer = Math.sqrt(
+          Math.pow(x - otherPlayer.x, 2) + 
+          Math.pow(y - otherPlayer.y, 2)
+        );
+        
+        if (distanceToPlayer < minDistanceBetweenPlayers) {
+          isFarEnough = false;
+        }
+      });
+      
+      if (isFarEnough) {
+        return { x, y };
+      }
+    }
+    
+    // En dernier recours, position complètement aléatoire
     const angle = Math.random() * Math.PI * 2;
     const distance = Math.random() * (this.state.safeZoneRadius * 0.7);
     

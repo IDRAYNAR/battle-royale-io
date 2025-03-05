@@ -131,6 +131,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Initialisation de la zone sûre pour la minimap
+    this.minimapSafeZone = this.add.graphics();
+
     // Chargement de la map depuis les fichiers Tiled
     this.map = this.make.tilemap({ key: 'map' });
     const tileset = this.map.addTilesetImage('tilesheet_complete', 'tilesheet');
@@ -240,11 +243,9 @@ export class GameScene extends Phaser.Scene {
     this.safeZone = this.add.graphics();
     const mapCenterX = this.map.widthInPixels / 2;
     const mapCenterY = this.map.heightInPixels / 2;
-    const initialRadius = Math.min(this.map.widthInPixels, this.map.heightInPixels) / 2;
+    // Ne pas limiter la zone par la taille de la carte
+    const initialRadius = 5000; // Rayon initial beaucoup plus grand que la carte
     this.updateSafeZone(mapCenterX, mapCenterY, initialRadius);
-
-    // Création de la zone sûre pour la minimap
-    this.minimapSafeZone = this.add.graphics();
 
     // Configuration de l'interface utilisateur
     this.createUI();
@@ -354,7 +355,7 @@ export class GameScene extends Phaser.Scene {
     this.checkTileCollisionProperties();
 
     // Mettre à jour le timer local
-    this.updateLocalTimer();
+    // this.updateLocalTimer();
 
     // Envoyer la position du joueur au serveur
     this.room.send('move', {
@@ -840,6 +841,18 @@ export class GameScene extends Phaser.Scene {
       this.updateZoneTimer();
     });
 
+    // Ajouter un gestionnaire pour le message zoneUpdate
+    this.room.onMessage("zoneUpdate", (message: { x: number, y: number, radius: number, nextShrinkTime: number }) => {
+      console.log(`Message zoneUpdate reçu:`, message);
+
+      // Mise à jour de la zone sûre
+      this.updateSafeZone(message.x, message.y, message.radius);
+
+      // Mise à jour du timer
+      this.nextShrinkTime = message.nextShrinkTime || 5;
+      this.updateZoneTimer();
+    });
+
     this.room.onMessage("zoneTimer", (message: { nextShrinkTime: number }) => {
       // Mise à jour du timer
       this.nextShrinkTime = message.nextShrinkTime || 30;
@@ -902,7 +915,7 @@ export class GameScene extends Phaser.Scene {
     // Création de la barre de vie
     this.healthBar = this.add.graphics();
     this.healthBar.setScrollFactor(0);
-    this.healthBar.setDepth(100);
+    this.healthBar.setDepth(150);
 
     // Texte pour la vie
     this.healthText = this.add.text(infoBoxX + padding, infoBoxY + padding, 'Vie: 100', {
@@ -913,7 +926,7 @@ export class GameScene extends Phaser.Scene {
       strokeThickness: 4
     });
     this.healthText.setScrollFactor(0);
-    this.healthText.setDepth(100);
+    this.healthText.setDepth(150);
 
     // Texte pour le nombre de joueurs restants
     this.playersAliveText = this.add.text(infoBoxX + padding, infoBoxY + padding + fontSize + 5, 'Joueurs: 0', {
@@ -924,7 +937,7 @@ export class GameScene extends Phaser.Scene {
       strokeThickness: 4
     });
     this.playersAliveText.setScrollFactor(0);
-    this.playersAliveText.setDepth(100);
+    this.playersAliveText.setDepth(150);
 
     // Texte pour l'arme équipée
     this.weaponText = this.add.text(infoBoxX + padding, infoBoxY + padding + (fontSize * 2) + 10, 'Arme: Aucune', {
@@ -935,7 +948,7 @@ export class GameScene extends Phaser.Scene {
       strokeThickness: 4
     });
     this.weaponText.setScrollFactor(0);
-    this.weaponText.setDepth(100);
+    this.weaponText.setDepth(150);
 
     // Texte pour le timer de la zone
     this.zoneTimerText = this.add.text(timerBoxX + timerBoxWidth - padding, timerBoxY + timerBoxHeight / 2, 'Zone: 30s', {
@@ -947,7 +960,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.zoneTimerText.setOrigin(1, 0.5);
     this.zoneTimerText.setScrollFactor(0);
-    this.zoneTimerText.setDepth(100);
+    this.zoneTimerText.setDepth(150);
 
     // Création du fond pour les munitions
     this.ammoBackground = this.add.graphics();
@@ -956,7 +969,7 @@ export class GameScene extends Phaser.Scene {
     this.ammoBackground.fillRoundedRect(width - 200, height - 70, 190, 40, 10);
     this.ammoBackground.strokeRoundedRect(width - 200, height - 70, 190, 40, 10);
     this.ammoBackground.setScrollFactor(0);
-    this.ammoBackground.setDepth(100);
+    this.ammoBackground.setDepth(150);
 
     // Création du texte pour les munitions
     this.ammoText = this.add.text(width - 105, height - 50, "Pas d'arme", {
@@ -968,7 +981,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.ammoText.setOrigin(0.5);
     this.ammoText.setScrollFactor(0);
-    this.ammoText.setDepth(100);
+    this.ammoText.setDepth(150);
 
     // Création du texte pour le rechargement
     this.reloadingText = this.add.text(width / 2, height - 100, 'RECHARGEMENT...', {
@@ -980,7 +993,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.reloadingText.setOrigin(0.5);
     this.reloadingText.setScrollFactor(0);
-    this.reloadingText.setDepth(100);
+    this.reloadingText.setDepth(150);
     this.reloadingText.setVisible(false);
 
     // Mise à jour de la barre de vie
@@ -991,6 +1004,20 @@ export class GameScene extends Phaser.Scene {
 
     // Ajout d'un événement de redimensionnement pour adapter l'UI
     this.scale.on('resize', this.resizeUI, this);
+
+    // S'assurer que tous les éléments d'UI sont au-dessus de la zone
+    this.healthBar.setDepth(150);
+    this.healthText.setDepth(150);
+    this.playersAliveText.setDepth(150);
+    this.weaponText.setDepth(150);
+    this.ammoText.setDepth(150);
+    this.reloadingText.setDepth(150);
+    this.zoneTimerText.setDepth(150);
+    
+    // S'assurer que le contour de la minimap est au-dessus de la minimap elle-même
+    if (this.minimapBorder) {
+      this.minimapBorder.setDepth(151);
+    }
   }
 
   private resizeUI() {
@@ -1045,7 +1072,7 @@ export class GameScene extends Phaser.Scene {
     this.ammoBackground.fillRoundedRect(width - 200, height - 70, 190, 40, 10);
     this.ammoBackground.strokeRoundedRect(width - 200, height - 70, 190, 40, 10);
     this.ammoBackground.setScrollFactor(0);
-    this.ammoBackground.setDepth(100);
+    this.ammoBackground.setDepth(150);
 
     // Repositionner les textes et mettre à jour les tailles de police
     this.healthText.setPosition(infoBoxX + padding, infoBoxY + padding);
@@ -1184,28 +1211,46 @@ export class GameScene extends Phaser.Scene {
 
   // Dessiner la zone sûre
   private drawSafeZone(x: number, y: number, radius: number) {
-    if (!this.safeZone) return;
-
     this.safeZone.clear();
-
-    // Dessiner un cercle rempli semi-transparent pour la zone sûre
-    this.safeZone.fillStyle(0x00ffff, 0.1);
+    
+    // Remplissage plus visible
+    this.safeZone.fillStyle(0x00ffff, 0.2); // Bleu avec opacité plus forte
     this.safeZone.fillCircle(x, y, radius);
-
-    // Dessiner le contour de la zone sûre
-    this.safeZone.lineStyle(3, 0x00ffff, 1);
+    
+    // Effet de lueur externe
+    this.safeZone.lineStyle(16, 0xff0000, 0.15); 
     this.safeZone.strokeCircle(x, y, radius);
+    
+    // Grande bordure principale - plus visible
+    this.safeZone.lineStyle(12, 0xff0000, 0.4);
+    this.safeZone.strokeCircle(x, y, radius);
+    
+    // Bordure interne brillante - visible même sur les fonds clairs
+    this.safeZone.lineStyle(3, 0xffff00, 1.0); // Jaune vif à pleine opacité 
+    this.safeZone.strokeCircle(x, y, radius);
+    
+    // Positionner la zone pour qu'elle soit bien visible
+    this.safeZone.setDepth(60);
   }
 
   // Dessiner la zone sûre sur la minimap
   private drawMinimapSafeZone(x: number, y: number, radius: number) {
-    if (!this.minimapSafeZone) return;
-
     this.minimapSafeZone.clear();
-
-    // Dessiner le contour de la zone sûre sur la minimap
-    this.minimapSafeZone.lineStyle(2, 0x00ffff, 1);
+    
+    // Remplissage visible sur la minimap
+    this.minimapSafeZone.fillStyle(0xff0000, 0.15);
+    this.minimapSafeZone.fillCircle(x, y, radius);
+    
+    // Bordure principale épaisse 
+    this.minimapSafeZone.lineStyle(4, 0xff0000, 0.6);
     this.minimapSafeZone.strokeCircle(x, y, radius);
+    
+    // Bordure interne brillante pour contraste
+    this.minimapSafeZone.lineStyle(2, 0xffff00, 1.0);
+    this.minimapSafeZone.strokeCircle(x, y, radius);
+    
+    // Assurer que la zone de la minimap est bien visible
+    this.minimapSafeZone.setDepth(101);
   }
 
   // Ajout d'un effet de traînée pour les balles
@@ -1234,54 +1279,18 @@ export class GameScene extends Phaser.Scene {
 
   // Mise à jour du timer de la zone
   private updateZoneTimer() {
-    if (!this.zoneTimerText) return;
-
-    // Vérifier que nextShrinkTime est un nombre valide
-    if (isNaN(this.nextShrinkTime) || this.nextShrinkTime === undefined) {
-      console.error("nextShrinkTime n'est pas un nombre valide:", this.nextShrinkTime);
-      this.nextShrinkTime = 30; // Valeur par défaut
+    if (this.room) {
+      this.room.onMessage("zoneTimer", (data: { nextShrinkTime: number }) => {
+        this.nextShrinkTime = data.nextShrinkTime;
+        
+        // Mise à jour visuelle du texte du timer - version simplifiée
+        if (this.zoneTimerText) {
+          this.zoneTimerText.setText(`Zone: ${this.nextShrinkTime}s`);
+          this.zoneTimerText.setColor('#ffffff');
+          this.zoneTimerText.setFontSize(24);
+        }
+      });
     }
-
-    // Formater le temps restant
-    const minutes = Math.floor(this.nextShrinkTime / 60);
-    const seconds = Math.floor(this.nextShrinkTime % 60);
-    const timeString = `${minutes > 0 ? minutes + 'm ' : ''}${seconds}s`;
-
-    // Changer la couleur en fonction du temps restant
-    let color = '#00ffff';
-    if (this.nextShrinkTime <= 10) {
-      color = '#ff0000';
-
-      // Effet de pulsation pour les 10 dernières secondes
-      if (!this.tweens.isTweening(this.zoneTimerText)) {
-        this.tweens.add({
-          targets: this.zoneTimerText,
-          scale: { from: 1, to: 1.2 },
-          duration: 500,
-          ease: 'Sine.easeInOut',
-          yoyo: true,
-          repeat: -1
-        });
-      }
-    } else if (this.nextShrinkTime <= 20) {
-      color = '#ffff00';
-
-      // Arrêter l'effet de pulsation si on n'est plus dans les 10 dernières secondes
-      if (this.tweens.isTweening(this.zoneTimerText)) {
-        this.tweens.killTweensOf(this.zoneTimerText);
-        this.zoneTimerText.setScale(1);
-      }
-    } else {
-      // Arrêter l'effet de pulsation si on n'est plus dans les 10 dernières secondes
-      if (this.tweens.isTweening(this.zoneTimerText)) {
-        this.tweens.killTweensOf(this.zoneTimerText);
-        this.zoneTimerText.setScale(1);
-      }
-    }
-
-    // Mise à jour du texte
-    this.zoneTimerText.setText(`Zone: ${timeString}`);
-    this.zoneTimerText.setColor(color);
   }
 
   // Méthode mise à jour pour afficher les munitions et les chargeurs

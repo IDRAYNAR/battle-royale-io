@@ -45,11 +45,11 @@ class BattleRoyaleState extends Schema {
   @type({ map: Weapon }) weapons = new MapSchema<Weapon>();
   @type("number") mapWidth: number = 3968; // 62 tiles * 64 pixels
   @type("number") mapHeight: number = 3968; // 62 tiles * 64 pixels
-  @type("number") shrinkTimer: number = 30; // Réduit de 60 à 30 secondes
-  @type("number") safeZoneRadius: number = 1984; // Rayon initial de la zone sûre (moitié de la map)
+  @type("number") shrinkTimer: number = 5; // Réduit de 30 à 5 secondes
+  @type("number") safeZoneRadius: number = 5000; // Rayon initial plus grand que la map pour commencer en dehors
   @type("number") safeZoneX: number = 1984; // Position X du centre de la zone sûre (moitié de la map)
   @type("number") safeZoneY: number = 1984; // Position Y du centre de la zone sûre (moitié de la map)
-  @type("number") nextShrinkTime: number = 30; // Temps restant avant le prochain rétrécissement
+  @type("number") nextShrinkTime: number = 5; // Temps restant avant le prochain rétrécissement réduit à 5 secondes
 }
 
 export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
@@ -58,7 +58,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   // Intervalle pour le rétrécissement de la zone
   private shrinkInterval!: NodeJS.Timeout;
   // Vitesse de rétrécissement de la zone
-  private shrinkSpeed: number = 10; // Augmenté de 5 à 10
+  private shrinkSpeed: number = 250; // Augmenté de 50 à 150 pour un rétrécissement plus rapide
   // Flag pour indiquer si la zone est active
   private zoneActive: boolean = false;
   
@@ -265,11 +265,11 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
     this.generateWeapons(Math.max(10, this.minWeapons));
     
     // Initialisation de la zone
-    this.state.safeZoneRadius = 1984;
+    this.state.safeZoneRadius = 5000;
     this.state.safeZoneX = 1984;
     this.state.safeZoneY = 1984;
-    this.state.shrinkTimer = 30;
-    this.state.nextShrinkTime = 30;
+    this.state.shrinkTimer = 5;
+    this.state.nextShrinkTime = 5;
     this.zoneActive = true;
     
     // Envoi de l'état initial de la zone à tous les clients
@@ -488,29 +488,34 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
 
   // Rétrécissement de la zone sûre
   private shrinkZone() {
-    if (!this.zoneActive) return;
-    
-    // Réduction du temps avant le prochain rétrécissement
+    // Si la zone n'est pas encore active, l'activer
+    if (!this.zoneActive) {
+      this.zoneActive = true;
+    }
+
+    // Décrémenter le timer
     this.state.shrinkTimer--;
     this.state.nextShrinkTime = this.state.shrinkTimer;
     
-    // Si le temps est écoulé, rétrécir la zone
+    // Si le timer atteint zéro, rétrécir la zone
     if (this.state.shrinkTimer <= 0) {
-      // Réinitialisation du timer
-      this.state.shrinkTimer = 30;
-      this.state.nextShrinkTime = 30;
+      // Réinitialiser le timer
+      this.state.shrinkTimer = 5;
+      this.state.nextShrinkTime = 5;
       
-      // Réduction du rayon de la zone sûre
-      const newRadius = Math.max(100, this.state.safeZoneRadius - this.shrinkSpeed);
+      const currentRadius = this.state.safeZoneRadius;
+      
+      // Réduire le rayon de la zone
+      const newRadius = Math.max(200, currentRadius - this.shrinkSpeed);
       this.state.safeZoneRadius = newRadius;
       
       console.log(`Zone rétrécie: ${this.state.safeZoneRadius}, position: ${this.state.safeZoneX},${this.state.safeZoneY}`);
       
       // Notification aux clients
-      this.broadcast("zoneShrink", {
-        radius: this.state.safeZoneRadius,
+      this.broadcast("zoneUpdate", {
         x: this.state.safeZoneX,
         y: this.state.safeZoneY,
+        radius: this.state.safeZoneRadius,
         nextShrinkTime: this.state.nextShrinkTime
       });
     } else {

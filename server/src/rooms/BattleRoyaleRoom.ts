@@ -64,7 +64,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   private zoneActive: boolean = false;
   
   // Nombre minimum d'armes sur la carte
-  private minWeapons: number = 6;
+  private minWeapons: number = 15;
 
   onCreate(options: any) {
     this.setState(new BattleRoyaleState());

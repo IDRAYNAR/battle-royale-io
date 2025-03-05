@@ -488,6 +488,11 @@ export class GameScene extends Phaser.Scene {
     // Gérer les contrôles du joueur
     this.handlePlayerControls();
 
+    // Mise à jour de la rotation du joueur avec le pointeur de la souris
+    if (!this.gamepadsEnabled || !this.gamepad) {
+      this.updatePlayerRotation();
+    }
+
     // Support de la gâchette droite (R2) pour tirer
     if (this.gamepadsEnabled && this.gamepad) {
       // Mettre à jour la rotation du joueur avec le joystick droit en temps réel
@@ -2069,25 +2074,8 @@ export class GameScene extends Phaser.Scene {
       this.currentPlayer.setVelocity(0, 0);
     }
     
-    // Gestion de la rotation en fonction de la position de la souris
-    // Seulement si aucune manette n'est utilisée
-    if (!this.gamepadsEnabled || !this.gamepad) {
-      const pointer = this.input.activePointer;
-      if (pointer) {
-        const angle = Phaser.Math.Angle.Between(
-          this.currentPlayer.x,
-          this.currentPlayer.y,
-          pointer.worldX,
-          pointer.worldY
-        );
-        
-        // Rotation du joueur vers la cible
-        this.currentPlayer.setRotation(angle);
-        
-        // Envoi de la rotation au serveur
-        this.room.send('rotate', { rotation: angle });
-      }
-    }
+    // Mettre à jour la rotation du joueur (que ce soit avec souris ou manette)
+    this.updatePlayerRotation();
   }
 
   // Méthode pour mettre à jour la rotation du joueur en fonction de la position de la souris
@@ -2120,22 +2108,28 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Si aucune manette n'est connectée, utiliser la souris
-    // Mettre à jour la rotation du joueur en fonction de la position de la souris
-    const pointer = this.input.activePointer;
-    angle = Phaser.Math.Angle.Between(
-      this.currentPlayer.x,
-      this.currentPlayer.y,
-      pointer.worldX,
-      pointer.worldY
-    );
-    
-    // S'assurer que l'angle est un nombre valide
-    if (!isNaN(angle) && isFinite(angle)) {
-      // Mettre à jour la rotation du joueur
-      this.currentPlayer.setRotation(angle);
+    if (this.input && this.input.activePointer) {
+      const pointer = this.input.activePointer;
       
-      // Envoi de la rotation au serveur
-      this.room.send('rotate', { rotation: angle });
+      // Convertir les coordonnées de l'écran en coordonnées du monde
+      const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      
+      // Calculer l'angle entre le joueur et le pointeur dans l'espace monde
+      angle = Phaser.Math.Angle.Between(
+        this.currentPlayer.x,
+        this.currentPlayer.y,
+        worldPoint.x,
+        worldPoint.y
+      );
+      
+      // S'assurer que l'angle est un nombre valide
+      if (!isNaN(angle) && isFinite(angle)) {
+        // Mettre à jour la rotation du joueur
+        this.currentPlayer.setRotation(angle);
+        
+        // Envoi de la rotation au serveur
+        this.room.send('rotate', { rotation: angle });
+      }
     }
   }
 

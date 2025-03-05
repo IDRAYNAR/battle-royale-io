@@ -871,44 +871,100 @@ export class GameScene extends Phaser.Scene {
 
       // Ajout de la balle à la liste des balles
       this.bullets.set(bulletId, bulletSprite);
+      
+      // Fonction pour créer un effet d'impact lors d'une collision
+      const createImpactEffect = (x: number, y: number) => {
+        // Créer un effet de particules pour l'impact
+        const particles = this.add.particles(x, y, 'bullet', {
+          speed: 200,
+          scale: { start: 0.6, end: 0 },
+          blendMode: 'SCREEN',
+          lifespan: 150,
+          gravityY: 300,
+          quantity: 10,
+          maxParticles: 10
+        });
+        
+        // Détruire l'émetteur après un court délai
+        this.time.delayedCall(200, () => {
+          particles.destroy();
+        });
+      };
 
       // Ajout de la collision entre la balle et la couche de collision
       this.physics.add.collider(bulletSprite, this.groundLayer, () => {
+        // Créer un effet d'impact
+        createImpactEffect(bulletSprite.x, bulletSprite.y);
+        
         // Supprimer la balle lorsqu'elle touche un mur
         this.room.send('removeBullet', { bulletId });
+        
+        // Supprimer le sprite localement aussi pour une réaction immédiate
+        bulletSprite.destroy();
+        this.bullets.delete(bulletId);
       });
 
       // Ajout de la collision entre la balle et la couche d'objets si elle existe
       if (this.collisionLayer) {
         this.physics.add.collider(bulletSprite, this.collisionLayer, () => {
+          // Créer un effet d'impact
+          createImpactEffect(bulletSprite.x, bulletSprite.y);
+          
           // Supprimer la balle lorsqu'elle touche un objet
           this.room.send('removeBullet', { bulletId });
+          
+          // Supprimer le sprite localement aussi
+          bulletSprite.destroy();
+          this.bullets.delete(bulletId);
         });
       }
 
       // Ajout de la collision entre la balle et la couche de détails si elle existe
-      const detailsLayer = this.map.getLayer('Details');
-      if (detailsLayer && detailsLayer.tilemapLayer) {
-        this.physics.add.collider(bulletSprite, detailsLayer.tilemapLayer, () => {
+      if (this.detailsLayer) {
+        this.physics.add.collider(bulletSprite, this.detailsLayer, () => {
+          // Créer un effet d'impact
+          createImpactEffect(bulletSprite.x, bulletSprite.y);
+          
           // Supprimer la balle lorsqu'elle touche un détail
           this.room.send('removeBullet', { bulletId });
+          
+          // Supprimer le sprite localement aussi
+          bulletSprite.destroy();
+          this.bullets.delete(bulletId);
         });
       }
 
       // Mise à jour de la position de la balle lorsqu'elle change
       bullet.onChange(() => {
-        bulletSprite.setPosition(bullet.x, bullet.y);
-        bulletSprite.setRotation(bullet.rotation);
+        // Mettre à jour la position seulement si le sprite existe encore
+        if (bulletSprite.active) {
+          bulletSprite.setPosition(bullet.x, bullet.y);
+          bulletSprite.setRotation(bullet.rotation);
+        }
       });
     });
-
+    
     // Gestion de la suppression des balles
     this.room.state.bullets.onRemove((bullet: Bullet, bulletId: string) => {
-      console.log(`Balle ${bulletId} supprimée`);
-
-      const sprite = this.bullets.get(bulletId);
-      if (sprite) {
-        sprite.destroy();
+      const bulletSprite = this.bullets.get(bulletId);
+      if (bulletSprite) {
+        // Créer un petit effet d'impact si la balle est supprimée par le serveur
+        const particles = this.add.particles(bulletSprite.x, bulletSprite.y, 'bullet', {
+          speed: 100,
+          scale: { start: 0.4, end: 0 },
+          blendMode: 'ADD',
+          lifespan: 100,
+          quantity: 5,
+          maxParticles: 5
+        });
+        
+        // Détruire l'émetteur après un court délai
+        this.time.delayedCall(150, () => {
+          particles.destroy();
+        });
+        
+        // Supprimer le sprite
+        bulletSprite.destroy();
         this.bullets.delete(bulletId);
       }
     });

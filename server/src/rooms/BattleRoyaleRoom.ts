@@ -390,6 +390,17 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       }
     });
     
+    // Gestionnaire pour supprimer une balle lorsqu'elle touche un obstacle
+    this.onMessage("removeBullet", (client, data) => {
+      if (data && data.bulletId) {
+        // Vérifier que la balle existe avant de la supprimer
+        if (this.state.bullets.has(data.bulletId)) {
+          console.log(`Suppression de la balle ${data.bulletId} suite à une collision avec un obstacle`);
+          this.state.bullets.delete(data.bulletId);
+        }
+      }
+    });
+    
     // Démarrage de la boucle de jeu
     this.gameInterval = setInterval(() => {
       this.gameLoop();
@@ -476,17 +487,59 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
       const deltaX = Math.cos(bullet.rotation) * (bullet.speed / 60);
       const deltaY = Math.sin(bullet.rotation) * (bullet.speed / 60);
       
-      bullet.x += deltaX;
-      bullet.y += deltaY;
+      // Vérifier si la nouvelle position entrainerait une collision avec un collider
+      const newX = bullet.x + deltaX;
+      const newY = bullet.y + deltaY;
       
-      // Suppression des balles qui sortent de la carte
-      if (
-        bullet.x < 0 || 
-        bullet.x > this.state.mapWidth || 
-        bullet.y < 0 || 
-        bullet.y > this.state.mapHeight
-      ) {
-        this.state.bullets.delete(bulletId);
+      // Vérifier les collisions avec les éléments du décor
+      let hasCollision = false;
+      
+      // Distance maximale pour le test de collision = distance parcourue par la balle + marge de sécurité
+      const maxDistance = Math.sqrt(Math.pow(deltaX, 2) + Math.pow(deltaY, 2)) + 100;
+      
+      // Parcourir tous les colliders enregistrés
+      for (const collider of this.colliderPositions) {
+        // Calcul préliminaire de la distance entre la balle et le collider
+        const approxDistance = Math.sqrt(
+          Math.pow(bullet.x - collider.x, 2) + 
+          Math.pow(bullet.y - collider.y, 2)
+        );
+        
+        // Si le collider est trop loin, on l'ignore
+        if (approxDistance > maxDistance + collider.radius) {
+          continue;
+        }
+        
+        // Calcul précis avec la nouvelle position
+        const distance = Math.sqrt(
+          Math.pow(newX - collider.x, 2) + 
+          Math.pow(newY - collider.y, 2)
+        );
+        
+        // Si la distance est inférieure au rayon du collider, il y a collision
+        if (distance < collider.radius) {
+          // Collision détectée, supprimer la balle
+          console.log(`Collision de balle avec un obstacle détectée sur le serveur: ${bulletId}`);
+          this.state.bullets.delete(bulletId);
+          hasCollision = true;
+          break;
+        }
+      }
+      
+      // Si pas de collision, mettre à jour la position de la balle
+      if (!hasCollision) {
+        bullet.x = newX;
+        bullet.y = newY;
+        
+        // Suppression des balles qui sortent de la carte
+        if (
+          bullet.x < 0 || 
+          bullet.x > this.state.mapWidth || 
+          bullet.y < 0 || 
+          bullet.y > this.state.mapHeight
+        ) {
+          this.state.bullets.delete(bulletId);
+        }
       }
     });
   }

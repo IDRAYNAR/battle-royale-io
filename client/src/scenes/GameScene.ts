@@ -121,6 +121,13 @@ export class GameScene extends Phaser.Scene {
   private debugGraphics: Phaser.GameObjects.Graphics | null = null;
   private showDebugColliders: boolean = false; // Paramètre pour activer/désactiver le débogage des colliders
 
+  // Propriétés pour les contrôles mobiles
+  private isMobile: boolean = false;
+  private mobileJoystick: any = null;
+  private fireButton: Phaser.GameObjects.Container | null = null;
+  private reloadButton: Phaser.GameObjects.Container | null = null;
+  private joystickMovement: { x: number, y: number } = { x: 0, y: 0 };
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -146,20 +153,22 @@ export class GameScene extends Phaser.Scene {
   async create() {
     // Si nous n'avons pas déjà une salle (passée via init), on se connecte
     if (!this.room) {
-      try {
-        // Création d'une salle par défaut
-        this.room = await this.client.joinOrCreate('battle_royale');
-      } catch (error) {
-        console.error('Erreur de connexion à la salle:', error);
-        this.add.text(400, 300, 'Erreur de connexion au serveur', {
-          fontFamily: 'Arial',
-          fontSize: '24px',
-          color: '#ffffff'
-        }).setOrigin(0.5);
-        return;
-      }
+      // Récupérer les informations de connexion de la scène précédente
+      const roomId = this.registry.get('roomId') || '';
+      const nickname = this.registry.get('nickname') || 'Joueur';
+      await this.connectToRoom(roomId, nickname);
     }
+
+    // Détection des appareils mobiles
+    this.isMobile = this.detectMobileDevice();
+    console.log(`Appareil mobile détecté: ${this.isMobile}`);
+
+    // Création des couches de jeu
+    this.createGameLayers();
     
+    // Initialisation des contrôles mobiles si nécessaire
+    this.initMobileControls();
+
     // Configuration des événements de la salle
     this.setupRoom();
 
@@ -479,6 +488,9 @@ export class GameScene extends Phaser.Scene {
         }
       });
     }
+
+    // Initialise les contrôles pour appareils mobiles si nécessaire
+    this.initMobileControls();
   }
 
   update() {
@@ -2016,51 +2028,59 @@ export class GameScene extends Phaser.Scene {
     let vx = 0;
     let vy = 0;
 
-    // Gestion des touches ZQSD/WASD et des flèches
-    if ((this.isFrenchKeyboard && this.keyZ && this.keyZ.isDown) || 
-        (this.keyW && this.keyW.isDown) || 
-        (this.cursors && this.cursors.up.isDown)) {
-      vy = -speed;
-    }
-
-    if ((this.keyS && this.keyS.isDown) || (this.cursors && this.cursors.down.isDown)) {
-      vy = speed;
-    }
-
-    if ((this.isFrenchKeyboard && this.keyQ && this.keyQ.isDown) || 
-        (this.keyA && this.keyA.isDown) || 
-        (this.cursors && this.cursors.left.isDown)) {
-      vx = -speed;
-    }
-
-    if ((this.keyD && this.keyD.isDown) || (this.cursors && this.cursors.right.isDown)) {
-      vx = speed;
-    }
-
-    // Support des manettes - Joystick gauche (L3)
-    if (this.gamepadsEnabled && this.gamepad) {
-      // Obtenir les valeurs du joystick gauche
-      const leftStickX = this.gamepad.leftStick.x;
-      const leftStickY = this.gamepad.leftStick.y;
-
-      // Appliquer une zone morte pour éviter les mouvements indésirables
-      if (Math.abs(leftStickX) > this.joystickDeadZone) {
-        vx = leftStickX * speed;
+    // Gestion des contrôles mobiles s'ils sont actifs
+    if (this.isMobile && this.joystickMovement) {
+      vx = this.joystickMovement.x * speed;
+      vy = this.joystickMovement.y * speed;
+    } 
+    // Sinon, gestion des touches clavier normales
+    else {
+      // Gestion des touches ZQSD/WASD et des flèches
+      if ((this.isFrenchKeyboard && this.keyZ && this.keyZ.isDown) || 
+          (this.keyW && this.keyW.isDown) || 
+          (this.cursors && this.cursors.up.isDown)) {
+        vy = -speed;
       }
 
-      if (Math.abs(leftStickY) > this.joystickDeadZone) {
-        vy = leftStickY * speed;
+      if ((this.keyS && this.keyS.isDown) || (this.cursors && this.cursors.down.isDown)) {
+        vy = speed;
       }
 
-      // Support de la touche R2/RT pour recharger (bouton B sur Xbox, cercle sur PlayStation)
-      if (this.gamepad.buttons[1].pressed) { // Bouton B (Xbox) ou Circle (PlayStation)
+      if ((this.isFrenchKeyboard && this.keyQ && this.keyQ.isDown) || 
+          (this.keyA && this.keyA.isDown) || 
+          (this.cursors && this.cursors.left.isDown)) {
+        vx = -speed;
+      }
+
+      if ((this.keyD && this.keyD.isDown) || (this.cursors && this.cursors.right.isDown)) {
+        vx = speed;
+      }
+
+      // Support des manettes - Joystick gauche (L3)
+      if (this.gamepadsEnabled && this.gamepad) {
+        // Obtenir les valeurs du joystick gauche
+        const leftStickX = this.gamepad.leftStick.x;
+        const leftStickY = this.gamepad.leftStick.y;
+
+        // Appliquer une zone morte pour éviter les mouvements indésirables
+        if (Math.abs(leftStickX) > this.joystickDeadZone) {
+          vx = leftStickX * speed;
+        }
+
+        if (Math.abs(leftStickY) > this.joystickDeadZone) {
+          vy = leftStickY * speed;
+        }
+
+        // Support de la touche R2/RT pour recharger (bouton B sur Xbox, cercle sur PlayStation)
+        if (this.gamepad.buttons[1].pressed) { // Bouton B (Xbox) ou Circle (PlayStation)
+          this.reloadWeapon();
+        }
+      }
+
+      // Gestion de la touche R pour recharger
+      if (this.keyR && Phaser.Input.Keyboard.JustDown(this.keyR)) {
         this.reloadWeapon();
       }
-    }
-
-    // Gestion de la touche R pour recharger
-    if (this.keyR && Phaser.Input.Keyboard.JustDown(this.keyR)) {
-      this.reloadWeapon();
     }
 
     if (vx !== 0 || vy !== 0) {
@@ -2106,30 +2126,52 @@ export class GameScene extends Phaser.Scene {
       // Si une manette est connectée, on ne revient PAS à la souris quand le joystick est relâché
       return;
     }
+    
+    // Sur mobile, si on utilise le joystick pour se déplacer, orienter le joueur dans la direction du mouvement
+    if (this.isMobile && this.joystickMovement) {
+      const moveX = this.joystickMovement.x;
+      const moveY = this.joystickMovement.y;
+      
+      // Si le joystick est utilisé et qu'il y a un mouvement
+      if ((Math.abs(moveX) > 0.1 || Math.abs(moveY) > 0.1)) {
+        // Calculer l'angle en fonction de la direction du mouvement
+        angle = Math.atan2(moveY, moveX);
+        
+        // S'assurer que l'angle est un nombre valide
+        if (!isNaN(angle) && isFinite(angle)) {
+          // Mettre à jour la rotation du joueur
+          this.currentPlayer.setRotation(angle);
+          
+          // Envoi de la rotation au serveur
+          this.room.send('rotate', { rotation: angle });
+          
+          // Sur mobile, le joystick contrôle à la fois le mouvement et la rotation
+          return;
+        }
+      }
+    }
 
-    // Si aucune manette n'est connectée, utiliser la souris
+    // Utilisation de la souris (ou du toucher sur mobile pour viser dans une direction spécifique)
     if (this.input && this.input.activePointer) {
-      const pointer = this.input.activePointer;
-      
-      // Convertir les coordonnées de l'écran en coordonnées du monde
-      const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      
-      // Calculer l'angle entre le joueur et le pointeur dans l'espace monde
-      angle = Phaser.Math.Angle.Between(
+      // Obtenir les coordonnées de la caméra
+      const worldPoint = this.cameras.main.getWorldPoint(
+        this.input.activePointer.x,
+        this.input.activePointer.y
+      );
+
+      // Calculer l'angle entre le joueur et le pointeur
+      const angleToPointer = Phaser.Math.Angle.Between(
         this.currentPlayer.x,
         this.currentPlayer.y,
         worldPoint.x,
         worldPoint.y
       );
-      
-      // S'assurer que l'angle est un nombre valide
-      if (!isNaN(angle) && isFinite(angle)) {
-        // Mettre à jour la rotation du joueur
-        this.currentPlayer.setRotation(angle);
-        
-        // Envoi de la rotation au serveur
-        this.room.send('rotate', { rotation: angle });
-      }
+
+      // Mettre à jour la rotation du joueur
+      this.currentPlayer.setRotation(angleToPointer);
+
+      // Envoyer la rotation au serveur
+      this.room.send('rotate', { rotation: angleToPointer });
     }
   }
 
@@ -2380,6 +2422,31 @@ export class GameScene extends Phaser.Scene {
     
     // Par défaut, utiliser la détection de langue
     return isFrenchLocale;
+  }
+
+  /**
+   * Détecte si l'appareil est un mobile (smartphone ou tablette)
+   */
+  private detectMobileDevice(): boolean {
+    // Vérifier si on peut accéder à navigator et window
+    if (typeof navigator === 'undefined' || typeof window === 'undefined') {
+      return false;
+    }
+
+    // Détecter les appareils mobiles par l'agent utilisateur
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera || '';
+    const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+    
+    // Détecter les appareils tactiles
+    const hasTouchScreen = 
+      'ontouchstart' in window || 
+      navigator.maxTouchPoints > 0 || 
+      (navigator as any).msMaxTouchPoints > 0;
+    
+    // Si l'écran est petit ET que c'est un appareil tactile
+    const isSmallScreen = window.innerWidth < 1024;
+    
+    return (mobileRegex.test(userAgent) || hasTouchScreen) && isSmallScreen;
   }
 
   // Analyser la carte pour trouver les éléments avec des colliders et les signaler au serveur
@@ -2663,5 +2730,256 @@ export class GameScene extends Phaser.Scene {
         }
       });
     }
+  }
+
+  /**
+   * Se connecte à une salle de jeu
+   */
+  private async connectToRoom(roomId: string, nickname: string) {
+    try {
+      // Vérifier si on a un ID de salle spécifique
+      if (roomId && roomId.trim() !== '') {
+        // Rejoindre une salle existante
+        this.room = await this.client.joinById(roomId, { nickname });
+      } else {
+        // Créer ou rejoindre une salle par défaut
+        this.room = await this.client.joinOrCreate('battle_royale', { nickname });
+      }
+    } catch (error) {
+      console.error('Erreur de connexion à la salle:', error);
+      this.add.text(400, 300, 'Erreur de connexion au serveur', {
+        fontFamily: 'Arial',
+        fontSize: '24px',
+        color: '#ffffff'
+      }).setOrigin(0.5);
+      return;
+    }
+  }
+
+  /**
+   * Crée les différentes couches du jeu
+   */
+  private createGameLayers() {
+    // Création des couches pour organiser les éléments visuels
+    this.gameLayer = this.add.container(0, 0);
+    this.uiLayer = this.add.container(0, 0);
+    this.notificationLayer = this.add.container(0, 0);
+    
+    // Assigner les profondeurs
+    this.gameLayer.setDepth(10);       // Couche du jeu principal
+    this.uiLayer.setDepth(100);        // Couche d'interface utilisateur
+    this.notificationLayer.setDepth(1000); // Couche de notifications
+  }
+
+  /**
+   * Initialise les contrôles pour appareils mobiles si nécessaire
+   */
+  private initMobileControls() {
+    if (!this.isMobile) return;
+    
+    // Dimensions de l'écran
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    // Créer le joystick virtuel pour le mouvement
+    this.createVirtualJoystick();
+    
+    // Créer les boutons d'action
+    this.createMobileButtons();
+    
+    // Afficher les instructions pour les contrôles tactiles
+    this.showMobileControlsInfo();
+  }
+  
+  /**
+   * Crée le joystick virtuel pour le mouvement
+   */
+  private createVirtualJoystick() {
+    // Dimensions de l'écran
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    // Taille et position du joystick
+    const joystickRadius = Math.min(width, height) * 0.1;
+    const joystickX = joystickRadius * 1.5;
+    const joystickY = height - joystickRadius * 1.5;
+    
+    // Créer le fond du joystick
+    const joystickBase = this.add.circle(joystickX, joystickY, joystickRadius, 0x000000, 0.5);
+    joystickBase.setStrokeStyle(2, 0xffffff, 0.8);
+    
+    // Créer le stick du joystick
+    const joystickThumb = this.add.circle(joystickX, joystickY, joystickRadius * 0.5, 0xffffff, 0.8);
+    
+    // Création d'un joystick virtuel basique sans plugin
+    // (Implémentation plus simple sans dépendance externe)
+    const touchArea = this.add.circle(joystickX, joystickY, joystickRadius * 1.5, 0x000000, 0.01);
+    touchArea.setInteractive();
+    
+    // Variables pour suivre le mouvement du joystick
+    let isPointerDown = false;
+    const maxDistance = joystickRadius;
+    
+    // Gérer les événements de toucher
+    touchArea.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      isPointerDown = true;
+      updateJoystickPosition(pointer);
+    });
+    
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (isPointerDown) {
+        updateJoystickPosition(pointer);
+      }
+    });
+    
+    this.input.on('pointerup', () => {
+      isPointerDown = false;
+      resetJoystick();
+    });
+    
+    // Fonction pour mettre à jour la position du joystick
+    const updateJoystickPosition = (pointer: Phaser.Input.Pointer) => {
+      // Calculer la distance entre le pointeur et le centre du joystick
+      const dx = pointer.x - joystickX;
+      const dy = pointer.y - joystickY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Limiter la distance
+      if (distance <= maxDistance) {
+        joystickThumb.x = pointer.x;
+        joystickThumb.y = pointer.y;
+      } else {
+        // Normaliser le vecteur direction
+        const normalizedX = dx / distance;
+        const normalizedY = dy / distance;
+        
+        // Calculer la nouvelle position limitée
+        joystickThumb.x = joystickX + normalizedX * maxDistance;
+        joystickThumb.y = joystickY + normalizedY * maxDistance;
+      }
+      
+      // Mettre à jour les valeurs de mouvement
+      const moveX = (joystickThumb.x - joystickX) / maxDistance;
+      const moveY = (joystickThumb.y - joystickY) / maxDistance;
+      
+      // Stocker les valeurs de mouvement
+      this.joystickMovement = { x: moveX, y: moveY };
+    };
+    
+    // Fonction pour réinitialiser le joystick
+    const resetJoystick = () => {
+      joystickThumb.x = joystickX;
+      joystickThumb.y = joystickY;
+      this.joystickMovement = { x: 0, y: 0 };
+    };
+    
+    // Ajouter les éléments à la couche UI
+    this.uiLayer.add(joystickBase);
+    this.uiLayer.add(joystickThumb);
+    this.uiLayer.add(touchArea);
+  }
+  
+  /**
+   * Crée les boutons d'action pour mobile (tirer et recharger)
+   */
+  private createMobileButtons() {
+    // Dimensions de l'écran
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    // Taille des boutons
+    const buttonRadius = Math.min(width, height) * 0.08;
+    
+    // Position du bouton de tir (en bas à droite)
+    const fireButtonX = width - buttonRadius * 1.5;
+    const fireButtonY = height - buttonRadius * 1.5;
+    
+    // Position du bouton de rechargement (au-dessus du bouton de tir)
+    const reloadButtonX = width - buttonRadius * 1.5;
+    const reloadButtonY = height - buttonRadius * 3.5;
+    
+    // Créer le bouton de tir
+    this.fireButton = this.add.container(fireButtonX, fireButtonY);
+    const fireButtonBg = this.add.circle(0, 0, buttonRadius, 0xff0000, 0.7);
+    fireButtonBg.setStrokeStyle(2, 0xffffff, 0.8);
+    const fireIcon = this.add.text(0, 0, '🔫', { fontSize: `${buttonRadius}px` }).setOrigin(0.5);
+    this.fireButton.add(fireButtonBg);
+    this.fireButton.add(fireIcon);
+    
+    // Créer le bouton de rechargement
+    this.reloadButton = this.add.container(reloadButtonX, reloadButtonY);
+    const reloadButtonBg = this.add.circle(0, 0, buttonRadius, 0x0088ff, 0.7);
+    reloadButtonBg.setStrokeStyle(2, 0xffffff, 0.8);
+    const reloadIcon = this.add.text(0, 0, '🔄', { fontSize: `${buttonRadius}px` }).setOrigin(0.5);
+    this.reloadButton.add(reloadButtonBg);
+    this.reloadButton.add(reloadIcon);
+    
+    // Ajouter les interactions
+    fireButtonBg.setInteractive();
+    reloadButtonBg.setInteractive();
+    
+    // Événement pour le tir
+    fireButtonBg.on('pointerdown', () => {
+      // Vérifier le délai entre les tirs
+      const currentTime = this.time.now;
+      const fireRate = this.currentWeapon ? this.getFireRateForWeapon(this.currentWeapon) : 0;
+      
+      if (!this.isShooting && (currentTime - this.lastFireTime >= fireRate)) {
+        this.isShooting = true;
+        this.handleShootingOnClick();
+        
+        // Animation de feedback
+        this.tweens.add({
+          targets: fireButtonBg,
+          scaleX: 0.8,
+          scaleY: 0.8,
+          duration: 100,
+          yoyo: true
+        });
+        
+        // Réinitialiser le flag après un délai
+        this.time.delayedCall(100, () => {
+          this.isShooting = false;
+        });
+      }
+    });
+    
+    // Événement pour le rechargement
+    reloadButtonBg.on('pointerdown', () => {
+      this.reloadWeapon();
+      
+      // Animation de feedback
+      this.tweens.add({
+        targets: reloadButtonBg,
+        scaleX: 0.8,
+        scaleY: 0.8,
+        duration: 100,
+        yoyo: true
+      });
+    });
+    
+    // Ajouter les boutons à la couche UI
+    this.uiLayer.add(this.fireButton);
+    this.uiLayer.add(this.reloadButton);
+  }
+  
+  /**
+   * Affiche des informations sur les contrôles mobiles
+   */
+  private showMobileControlsInfo() {
+    const infoText = this.add.text(10, 10, 'Contrôles tactiles:\nJoystick gauche: Déplacement\nBouton rouge: Tir\nBouton bleu: Rechargement', {
+      fontSize: '16px',
+      color: '#ffffff',
+      backgroundColor: '#000000',
+      padding: { x: 10, y: 5 }
+    });
+    
+    infoText.setDepth(1000);
+    this.uiLayer.add(infoText);
+    
+    // Faire disparaître le texte après 10 secondes
+    this.time.delayedCall(10000, () => {
+      infoText.destroy();
+    });
   }
 } 

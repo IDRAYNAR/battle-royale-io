@@ -13,7 +13,8 @@
   "description": "",
   "dependencies": {
     "colyseus.js": "^0.15.0",
-    "phaser": "^3.60.0"
+    "phaser": "^3.60.0",
+    "phaser3-rex-plugins": "^1.80.14"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^11.0.0",

@@ -1,7 +1,7 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema } from "@colyseus/schema";
 
-// Définition de la classe Player pour stocker les données des joueurs
+// Définition de la classe Player pour stocker
 class Player extends Schema {
   @type("number") x: number = Math.floor(Math.random() * 800);
   @type("number") y: number = Math.floor(Math.random() * 600);

@@ -54,16 +54,10 @@ class BattleRoyaleState extends Schema {
 }
 
 export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
-  // Intervalle pour la mise à jour du jeu
   private gameInterval!: NodeJS.Timeout;
-  // Intervalle pour le rétrécissement de la zone
   private shrinkInterval!: NodeJS.Timeout;
-  // Vitesse de rétrécissement de la zone
   private shrinkSpeed: number = 250; // Augmenté de 50 à 150 pour un rétrécissement plus rapide
-  // Flag pour indiquer si la zone est active
   private zoneActive: boolean = false;
-  
-  // Nombre minimum d'armes sur la carte
   private minWeapons: number = 15;
   
   // Nombre maximum d'armes sur la carte
@@ -73,14 +67,30 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   private colliderPositions: Array<{x: number, y: number, radius: number}> = [];
 
   onCreate(options: any) {
+    console.log(`🎮 Création d'une nouvelle salle avec options:`, options);
+    
+    // Configuration de l'ID de salle personnalisé si fourni
+    if (options.roomId) {
+      this.roomId = options.roomId;
+      console.log(`🔷 Utilisation d'un ID personnalisé: ${this.roomId}`);
+    }
+    
     // Initialisation de l'état du jeu
     this.setState(new BattleRoyaleState());
     
-    // Configuration des métadonnées de la salle (pour l'affichage dans la liste)
-    this.setMetadata({
+    // Utiliser les métadonnées envoyées par le client ou créer des métadonnées par défaut
+    const metadata = {
       name: options.name || `Salle ${Math.floor(Math.random() * 1000)}`,
-      createdAt: new Date().toISOString()
-    });
+      createdAt: options.metadata?.createdAt || new Date().toISOString(),
+      gameType: "battle_royale",
+      uniqueId: options.metadata?.uniqueId || `${Date.now()}-${Math.floor(Math.random() * 10000)}`
+    };
+    
+    // Définir les métadonnées pour que les clients puissent les voir
+    this.setMetadata(metadata);
+    
+    console.log(`🔷 Salle créée avec ID: ${this.roomId}`);
+    console.log(`🔷 Métadonnées de la salle: ${JSON.stringify(this.metadata)}`);
     
     // Nombre maximum de joueurs par salle
     this.maxClients = 10;
@@ -436,7 +446,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   }
 
   onJoin(client: Client, options: any) {
-    console.log(`Client ${client.sessionId} a rejoint la salle`);
+    console.log(`🟢 Joueur ${client.sessionId} a rejoint la salle ${this.roomId}`);
     
     // Création d'un nouveau joueur
     const player = new Player();
@@ -468,7 +478,7 @@ export class BattleRoyaleRoom extends Room<BattleRoyaleState> {
   }
 
   onLeave(client: Client, consented: boolean) {
-    console.log(`${client.sessionId} a quitté la partie!`);
+    console.log(`🔴 Joueur ${client.sessionId} a quitté la salle ${this.roomId}`);
     
     // Suppression du joueur de l'état de la salle
     this.state.players.delete(client.sessionId);

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import * as Colyseus from 'colyseus.js';
+import { roomService } from '../services/RoomService';
 
 interface Player {
   x: number;
@@ -147,8 +148,12 @@ export class GameScene extends Phaser.Scene {
     // Si nous n'avons pas déjà une salle (passée via init), on se connecte
     if (!this.room) {
       try {
-        // Création d'une salle par défaut
-        this.room = await this.client.joinOrCreate('battle_royale');
+        console.log("Aucune salle existante détectée, création d'une nouvelle salle...");
+        
+        // Au lieu d'utiliser joinOrCreate qui pourrait réutiliser la même salle,
+        // on crée une nouvelle salle avec un ID unique
+        this.room = await roomService.createRoom();
+        console.log(`Nouvelle salle créée avec l'ID: ${this.room.id}`);
       } catch (error) {
         console.error('Erreur de connexion à la salle:', error);
         this.add.text(400, 300, 'Erreur de connexion au serveur', {

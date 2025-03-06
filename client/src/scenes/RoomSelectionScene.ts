@@ -69,6 +69,14 @@ export class RoomSelectionScene extends Phaser.Scene {
     
     // Chargement des salles
     this.loadRooms();
+    
+    // Mettre en place un rafraîchissement automatique des salles toutes les 5 secondes
+    this.time.addEvent({
+      delay: 5000,
+      callback: this.loadRooms,
+      callbackScope: this,
+      loop: true
+    });
   }
   
   private createBackground(width: number, height: number) {
@@ -178,7 +186,25 @@ export class RoomSelectionScene extends Phaser.Scene {
       if (this.refreshButton) {
         this.refreshButton.setScale(0.9);
       }
-      this.loadRooms();
+      
+      // Ajouter un feedback visuel de rafraîchissement
+      const refreshingText = this.add.text(width/2, 100, 'Actualisation...', {
+        fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+        fontSize: '16px',
+        color: '#ffffff'
+      }).setOrigin(0.5);
+      
+      // Désactiver temporairement le bouton pour éviter les clics multiples
+      this.refreshButton?.disableInteractive();
+      
+      // Forcer un refresh complet avec plusieurs tentatives
+      setTimeout(async () => {
+        await this.loadRooms();
+        refreshingText.destroy();
+        
+        // Réactiver le bouton après le rafraîchissement
+        this.refreshButton?.setInteractive();
+      }, 500);
     });
     
     this.refreshButton.on('pointerup', () => {
@@ -325,11 +351,39 @@ export class RoomSelectionScene extends Phaser.Scene {
       
       // Création d'une salle
       try {
+        // Désactiver le bouton pendant la création pour éviter les clics multiples
+        this.createRoomBtn?.disableInteractive();
+        
+        // Ajouter un texte temporaire pour indiquer que la création est en cours
+        const loadingRoom = this.add.text(this.cameras.main.width/2, this.cameras.main.height/2 - 100, 
+          'Création de la salle en cours...', {
+          fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+          fontSize: '20px',
+          color: '#ffffff'
+        }).setOrigin(0.5);
+        
+        console.log("Création d'une nouvelle salle avec ID unique...");
         const room = await roomService.createRoom();
+        console.log(`Salle créée avec succès, ID: ${room.id}`);
+        
+        // Supprimer le texte de chargement
+        loadingRoom.destroy();
+        
         // Une fois la salle créée, démarrer la scène de jeu
         this.scene.start('GameScene', { room });
       } catch (error) {
         console.error("Erreur lors de la création de la salle:", error);
+        // Réactiver le bouton en cas d'erreur
+        this.createRoomBtn?.setInteractive();
+        
+        // Afficher un message d'erreur
+        this.add.text(this.cameras.main.width/2, this.cameras.main.height/2 - 100, 
+          'Erreur lors de la création de la salle.\nVeuillez réessayer.', {
+          fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+          fontSize: '20px',
+          color: '#ff5555',
+          align: 'center'
+        }).setOrigin(0.5);
       }
     });
   }
@@ -343,9 +397,34 @@ export class RoomSelectionScene extends Phaser.Scene {
     this.roomButtons.forEach(button => button.destroy());
     this.roomButtons = [];
     
+    // Supprimer TOUS les messages précédents pour un nettoyage plus complet
+    this.children.each(child => {
+      if (child instanceof Phaser.GameObjects.Text && 
+          child !== this.loadingText &&
+          (child.text.includes('Aucune salle') || 
+           child.text.includes('salle(s) disponible') ||
+           child.text.includes('Erreur'))) {
+        child.destroy();
+      }
+    });
+    
     try {
-      // Charger les salles disponibles
+      console.log("Chargement des salles disponibles...");
+      
+      // Forcer l'effacement de la liste précédente
+      this.rooms = [];
+      
+      // Première tentative de récupération des salles
       this.rooms = await roomService.getAvailableRooms();
+      console.log(`Première tentative: ${this.rooms.length} salles trouvées`);
+      
+      // Si aucune salle n'est trouvée, attendre un peu et réessayer
+      if (this.rooms.length === 0) {
+        console.log("Aucune salle trouvée, nouvelle tentative dans 1 seconde...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        this.rooms = await roomService.getAvailableRooms();
+        console.log(`Deuxième tentative: ${this.rooms.length} salles trouvées`);
+      }
       
       // Masquer le texte de chargement
       if (this.loadingText) {
@@ -362,6 +441,7 @@ export class RoomSelectionScene extends Phaser.Scene {
           align: 'center'
         }).setOrigin(0.5);
       } else {
+        console.log("Affichage des salles disponibles:", this.rooms);
         this.displayRooms();
       }
     } catch (error) {
@@ -392,27 +472,62 @@ export class RoomSelectionScene extends Phaser.Scene {
     const roomListY = panelY + 120;
     const roomListHeight = Math.min(this.cameras.main.height * 0.85, 700) - 200;
     
+    // Vérification supplémentaire
+    if (!this.rooms || this.rooms.length === 0) {
+      console.warn("Pas de salles à afficher dans displayRooms");
+      this.add.text(width/2, this.cameras.main.height/2, 'Aucune salle disponible.\nCréez-en une nouvelle !', {
+        fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+        fontSize: '24px',
+        color: '#ffffff',
+        align: 'center'
+      }).setOrigin(0.5);
+      return;
+    }
+    
+    // Ajouter un texte d'en-tête
+    this.add.text(width/2, roomListY - 50, `${this.rooms.length} salle(s) disponible(s)`, {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+      fontSize: '18px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
     // Afficher chaque salle
     this.rooms.forEach((room, index) => {
       const roomY = roomListY + (index * 70);
-      
+      console.log(`Création de l'élément pour la salle: ${room.id} en position ${roomY}`);
       this.createRoomListItem(room, panelX + 40, roomY, panelWidth - 80);
     });
   }
   
   private createRoomListItem(room: Room, x: number, y: number, width: number) {
-    // Création du conteneur pour le bouton de salle
-    const roomButton = this.add.container(x, y);
+    // Conteneur pour l'élément de salle
+    const container = this.add.container(x, y);
     
     // Fond du bouton avec effet glassmorphism
     const buttonHeight = 60;
-    const background = this.add.graphics();
-    background.fillStyle(0x091836, 0.5);
-    background.fillRoundedRect(0, 0, width, buttonHeight, 12);
-    background.lineStyle(1, 0x3498db, 0.2);
-    background.strokeRoundedRect(0, 0, width, buttonHeight, 12);
+    const roomButton = this.add.graphics();
+    roomButton.fillStyle(0x0d1b2a, 0.7); // Couleur de fond plus sombre
+    roomButton.fillRoundedRect(0, 0, width, buttonHeight, 12);
+    roomButton.lineStyle(1.5, 0x3282b8, 0.3); // Bordure bleue
+    roomButton.strokeRoundedRect(0, 0, width, buttonHeight, 12);
     
-    // Nom de la salle
+    // Ajouter un effet subtil pour identifier les salles
+    // Petite étiquette d'ID unique
+    const idTag = this.add.graphics();
+    idTag.fillStyle(0x13674c, 0.8);
+    idTag.fillRoundedRect(width - 80, 5, 70, 20, 8);
+    
+    // Identifiant court de la salle
+    const shortId = room.id.substring(room.id.lastIndexOf('_') + 1, room.id.length).substring(0, 6);
+    const idText = this.add.text(width - 45, 15, `#${shortId}`, {
+      fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+      fontSize: '10px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Nom de la salle en plus grand
     const text = this.add.text(20, buttonHeight/2, room.name, {
       fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: '18px',
@@ -421,56 +536,83 @@ export class RoomSelectionScene extends Phaser.Scene {
     }).setOrigin(0, 0.5);
     
     // Nombre de joueurs
-    const playersText = this.add.text(width - 20, buttonHeight/2, `${room.clients}/${room.maxClients} joueurs`, {
+    const playersText = this.add.text(width - 100, buttonHeight/2, `${room.clients}/${room.maxClients} joueurs`, {
       fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
       fontSize: '14px',
-      color: '#aaaaaa'
+      color: '#5effc3',
+      fontStyle: 'bold'
     }).setOrigin(1, 0.5);
     
     // Ajout au conteneur
-    roomButton.add([background, text, playersText]);
+    container.add([roomButton, text, playersText, idTag, idText]);
     
     // Zone interactive
     const hitArea = new Phaser.Geom.Rectangle(0, 0, width, buttonHeight);
-    roomButton.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
+    container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
     
     // Effet hover
-    roomButton.on('pointerover', () => {
-      background.clear();
-      background.fillStyle(0x1a3772, 0.7);
-      background.fillRoundedRect(0, 0, width, buttonHeight, 12);
-      background.lineStyle(1.5, 0x3498db, 0.4);
-      background.strokeRoundedRect(0, 0, width, buttonHeight, 12);
+    container.on('pointerover', () => {
+      roomButton.clear();
+      roomButton.fillStyle(0x1a3772, 0.7);
+      roomButton.fillRoundedRect(0, 0, width, buttonHeight, 12);
+      roomButton.lineStyle(1.5, 0x3498db, 0.4);
+      roomButton.strokeRoundedRect(0, 0, width, buttonHeight, 12);
     });
     
-    roomButton.on('pointerout', () => {
-      background.clear();
-      background.fillStyle(0x091836, 0.5);
-      background.fillRoundedRect(0, 0, width, buttonHeight, 12);
-      background.lineStyle(1, 0x3498db, 0.2);
-      background.strokeRoundedRect(0, 0, width, buttonHeight, 12);
+    container.on('pointerout', () => {
+      roomButton.clear();
+      roomButton.fillStyle(0x091836, 0.5);
+      roomButton.fillRoundedRect(0, 0, width, buttonHeight, 12);
+      roomButton.lineStyle(1, 0x3498db, 0.2);
+      roomButton.strokeRoundedRect(0, 0, width, buttonHeight, 12);
     });
     
-    // Effet clic
-    roomButton.on('pointerdown', () => {
-      text.setY(buttonHeight/2 + 2);
-      playersText.setY(buttonHeight/2 + 2);
-    });
-    
-    roomButton.on('pointerup', async () => {
-      text.setY(buttonHeight/2);
-      playersText.setY(buttonHeight/2);
-      
-      // Rejoindre cette salle
+    // Gestion du clic sur une salle
+    container.on('pointerup', async () => {
       try {
+        console.log(`Tentative de connexion à la salle ID: ${room.id}`);
+        
+        // Désactiver l'interaction pendant la connexion
+        container.disableInteractive();
+        
+        // Texte de chargement
+        const loadingText = this.add.text(this.cameras.main.width/2, this.cameras.main.height/2, 
+          'Connexion à la salle...', {
+          fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+          fontSize: '24px',
+          color: '#ffffff'
+        }).setOrigin(0.5);
+        
+        // Rejoindre la salle spécifique en utilisant son ID
         const joinedRoom = await roomService.joinRoom(room.id);
+        console.log(`Connecté à la salle ID: ${joinedRoom.id}`);
+        
+        // Supprimer le texte de chargement
+        loadingText.destroy();
+        
+        // Démarrer la scène de jeu avec la salle rejointe
         this.scene.start('GameScene', { room: joinedRoom });
       } catch (error) {
         console.error(`Erreur lors de la connexion à la salle ${room.id}:`, error);
+        
+        // Réactiver l'interaction en cas d'erreur
+        container.setInteractive();
+        
+        // Afficher un message d'erreur
+        this.add.text(this.cameras.main.width/2, this.cameras.main.height/2, 
+          'Erreur de connexion à la salle.\nLa salle pourrait ne plus être disponible.', {
+          fontFamily: '"Inter", "Segoe UI", Arial, sans-serif',
+          fontSize: '24px',
+          color: '#ff5555',
+          align: 'center'
+        }).setOrigin(0.5);
+        
+        // Rafraîchir la liste des salles après un court délai
+        setTimeout(() => this.loadRooms(), 2000);
       }
     });
     
     // Ajouter à la liste des boutons de salle
-    this.roomButtons.push(roomButton);
+    this.roomButtons.push(container);
   }
 } 

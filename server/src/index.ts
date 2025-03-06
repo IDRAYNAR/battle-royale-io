@@ -34,9 +34,23 @@ const gameServer = new Server({
 });
 
 // Enregistrement de notre salle de jeu
-// Au lieu d'enregistrer une salle fixe, on définit le modèle de salle
-// Les noms de salles seront créés dynamiquement par le client
-gameServer.define("battle_royale", BattleRoyaleRoom);
+// Utilisation d'une définition dynamique pour permettre la création de salles multiples
+const battleRoyaleRoom = gameServer.define("battle_royale", BattleRoyaleRoom, {
+  // Options de salle pour améliorer le comportement en local
+  // Ces options font en sorte que les salles ne soient pas nettoyées trop rapidement
+  presence: true,
+  // Pas de limite de taille pour le lobby (affiche toutes les salles)
+  maxClients: 16,
+  // Ne pas nettoyer les salles vides immédiatement
+  emptyRoomTimeout: 300, // 5 minutes avant de nettoyer une salle vide
+  // Conserver les métadonnées pour le listing
+  metadata: {
+    gameType: "battle_royale"
+  }
+});
+
+// Activation du listing en temps réel
+battleRoyaleRoom.enableRealtimeListing();
 
 // Démarrage du serveur
 gameServer.listen(port).then(() => {
